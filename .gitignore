@@ -44,3 +44,4 @@ gst-element-check.m4
 _stdint.h
 *.gir
 *.typelib
+*.o

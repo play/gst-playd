@@ -45,3 +45,4 @@ _stdint.h
 *.gir
 *.typelib
 *.o
+src/gst_playd

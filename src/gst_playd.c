@@ -40,7 +40,7 @@ static GOptionEntry entries[] = {
 
 struct timer_closure {
 	void* zmq_context;
-	const char* address;
+	char* address;
 };
 
 static char* zeromq_address_from_port(int port)
@@ -76,6 +76,12 @@ out:
 	return ret;
 }
 
+static gboolean handle_incoming_messages(gpointer user_data)
+{
+	g_warning("Tick");
+	return TRUE;
+}
+
 int main (int argc, char **argv)
 {
 	int ret = 0;
@@ -89,7 +95,6 @@ int main (int argc, char **argv)
 	g_option_context_add_main_entries(ctx, entries, "");
 
 	if (!g_option_context_parse(ctx, &argc, &argv, &err)) {
-		g_error("WE ARE HERE");
 		g_error("Option parsing failed: %s", err->message);
 		ret = EXIT_FAILURE;
 		goto out;
@@ -103,6 +108,23 @@ int main (int argc, char **argv)
 		g_free(address);
 		goto out;
 	}
+
+	/*
+	 * Server Mainloop
+	 */
+
+	GMainLoop* main_loop = g_main_loop_new(NULL, FALSE);
+
+	struct timer_closure closure = { zmq_ctx, zeromq_address_from_port(icecast_port) };
+	g_timeout_add(250, handle_incoming_messages, &closure);
+
+	g_unix_signal_add(SIGINT, g_main_loop_quit, main_loop);
+
+	g_warning("Starting Main Loop");
+	g_main_loop_run(main_loop);
+	g_warning("Bailing");
+
+	g_free(closure.address);
 
 out:
 	if (zmq_ctx) zmq_term(zmq_ctx);

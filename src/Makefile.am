@@ -11,7 +11,7 @@ gst_playd_CFLAGS = \
 	$(LIBZMQ_CFLAGS) \
 	$(GST_CFLAGS)
 
-gst_playd_LDFLAGS = \
+gst_playd_LDADD = \
 	$(GLIB_LIBS) \
 	$(LIBZMQ_LIBS) \
 	$(GST_LIBS)

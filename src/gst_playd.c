@@ -39,13 +39,25 @@ static GOptionEntry entries[] = {
 };
 
 struct timer_closure {
-	void* zmq_context;
-	char* address;
+	void* zmq_socket;
+	GMainLoop* main_loop;
 };
 
 static char* zeromq_address_from_port(int port)
 {
-	return g_strdup_printf("tcp://*:%d", port + 10000);
+	return g_strdup_printf("tcp://localhost:%d", port + 10000);
+}
+
+static gboolean close_socket(void* sock)
+{
+	if (!sock) return TRUE;
+
+	if (!zmq_close(sock)) {
+		g_warning("Failed to close socket: %s", zmq_strerror(zmq_errno()));
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 static gboolean send_client_message(void* zmq_context, const char* message, const char* address)
@@ -56,29 +68,50 @@ static gboolean send_client_message(void* zmq_context, const char* message, cons
 	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
 
 	g_warning("Connecting to %s", address);
-	if (!zmq_connect(sock, address)) {
+	if (zmq_connect(sock, address) == -1) {
 		g_warning("Failed to connect: %s", zmq_strerror(zmq_errno()));
 		ret = FALSE; goto out;
 	}
+
+	usleep(1);
 
 	zmq_msg_t msg;
 	zmq_msg_init_data(&msg, message, sizeof(char) * strlen(message), NULL, NULL);
 	zmq_send(sock, &msg, ZMQ_NOBLOCK);
 
 out:
-	if (sock) {
-		if (!zmq_close(sock)) {
-			g_warning("Failed to close socket: %s", zmq_strerror(zmq_errno()));
-			ret = FALSE;
-		}
-	}
-
+	close_socket(sock);
 	return ret;
 }
 
 static gboolean handle_incoming_messages(gpointer user_data)
 {
-	g_warning("Tick");
+	gboolean ret = TRUE;
+
+	struct timer_closure* closure = (struct timer_closure*) user_data;
+	void* zmq_sock = closure->zmq_socket;
+	zmq_msg_t msg;
+
+	zmq_msg_init(&msg);
+	if (zmq_recv(zmq_sock, &msg, ZMQ_NOBLOCK) == -1) {
+		switch (zmq_errno()) {
+		case EAGAIN:
+		case EINTR:
+		case EFSM:
+			ret = TRUE;
+			goto out;
+		default:
+			g_warning("Failed to recieve message: %s", zmq_strerror(zmq_errno()));
+			g_main_loop_quit(closure->main_loop);
+			ret = FALSE;
+			goto out;
+		}
+	}
+
+	g_warning("Message recieved: %s", zmq_msg_data(&msg));
+
+out:
+	zmq_msg_close(&msg);
 	return TRUE;
 }
 
@@ -90,6 +123,7 @@ int main (int argc, char **argv)
 	GOptionContext* ctx;
 
 	void* zmq_ctx = NULL;
+	void* sock = NULL;
 
 	ctx = g_option_context_new(" - A GStreamer backend daemon for Play");
 	g_option_context_add_main_entries(ctx, entries, "");
@@ -101,21 +135,28 @@ int main (int argc, char **argv)
 	}
 
 	zmq_ctx = zmq_init(1);
+	char* address = zeromq_address_from_port(icecast_port);
 
 	if (client_message) {
-		char* address = zeromq_address_from_port(icecast_port);
 		ret = send_client_message(zmq_ctx, client_message, address) ? 0 : 1;
 		g_free(address);
 		goto out;
 	}
 
-	/*
-	 * Server Mainloop
-	 */
+	int linger = 5*1000;
+	sock = zmq_socket(zmq_ctx, ZMQ_REP);
+	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
+
+	if (!zmq_bind(sock, address)) {
+		g_warning("Failed to start server on address %s: %s", address, zmq_strerror(zmq_errno()));
+		goto out;
+	}
+
+	/* Server Mainloop */
 
 	GMainLoop* main_loop = g_main_loop_new(NULL, FALSE);
 
-	struct timer_closure closure = { zmq_ctx, zeromq_address_from_port(icecast_port) };
+	struct timer_closure closure = { sock, main_loop, };
 	g_timeout_add(250, handle_incoming_messages, &closure);
 
 	g_unix_signal_add(SIGINT, g_main_loop_quit, main_loop);
@@ -124,10 +165,10 @@ int main (int argc, char **argv)
 	g_main_loop_run(main_loop);
 	g_warning("Bailing");
 
-	g_free(closure.address);
-
 out:
+	close_socket(sock);
 	if (zmq_ctx) zmq_term(zmq_ctx);
+	g_free(address);
 
 	g_option_context_free(ctx);
 	return ret;

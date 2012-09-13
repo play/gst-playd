@@ -41,6 +41,7 @@ static GOptionEntry entries[] = {
 struct timer_closure {
 	void* zmq_socket;
 	GMainLoop* main_loop;
+	gboolean should_quit;
 };
 
 static char* zeromq_address_from_port(int port)
@@ -92,6 +93,11 @@ static gboolean handle_incoming_messages(gpointer user_data)
 	void* zmq_sock = closure->zmq_socket;
 	zmq_msg_t msg;
 
+	if (closure->should_quit) {
+		g_main_loop_quit(closure->main_loop);
+		return FALSE;
+	}
+
 	zmq_msg_init(&msg);
 	if (zmq_recv(zmq_sock, &msg, ZMQ_NOBLOCK) == -1) {
 		switch (zmq_errno()) {
@@ -113,6 +119,12 @@ static gboolean handle_incoming_messages(gpointer user_data)
 out:
 	zmq_msg_close(&msg);
 	return TRUE;
+}
+
+static void handle_sigint(void* shouldquit)
+{
+	gboolean* should_quit = shouldquit;
+	*should_quit = TRUE;
 }
 
 int main (int argc, char **argv)
@@ -156,10 +168,10 @@ int main (int argc, char **argv)
 
 	GMainLoop* main_loop = g_main_loop_new(NULL, FALSE);
 
-	struct timer_closure closure = { sock, main_loop, };
+	struct timer_closure closure = { sock, main_loop, FALSE, };
 	g_timeout_add(250, handle_incoming_messages, &closure);
 
-	g_unix_signal_add(SIGINT, g_main_loop_quit, main_loop);
+	g_unix_signal_add(SIGINT, handle_sigint, &closure.should_quit);
 
 	g_warning("Starting Main Loop");
 	g_main_loop_run(main_loop);

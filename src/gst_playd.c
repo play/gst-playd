@@ -22,7 +22,6 @@
 #include <sys/types.h>
 
 #include <glib.h>
-#include <glib/goption.h>
 #include <zmq.h>
 
 #define EXIT_FAILURE 1
@@ -99,6 +98,7 @@ static gboolean handle_incoming_messages(gpointer user_data)
 	}
 
 	zmq_msg_init(&msg);
+	g_warning("Tick");
 	if (zmq_recv(zmq_sock, &msg, ZMQ_NOBLOCK) == -1) {
 		switch (zmq_errno()) {
 		case EAGAIN:
@@ -151,7 +151,6 @@ int main (int argc, char **argv)
 
 	if (client_message) {
 		ret = send_client_message(zmq_ctx, client_message, address) ? 0 : 1;
-		g_free(address);
 		goto out;
 	}
 
@@ -180,7 +179,7 @@ int main (int argc, char **argv)
 out:
 	close_socket(sock);
 	if (zmq_ctx) zmq_term(zmq_ctx);
-	g_free(address);
+	if (address) g_free(address);
 
 	g_option_context_free(ctx);
 	return ret;

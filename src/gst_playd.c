@@ -20,7 +20,7 @@
 
 #include <stdio.h>
 #include <sys/types.h>
-
+#include <string.h>
 #include <glib.h>
 #include <zmq.h>
 
@@ -43,16 +43,16 @@ struct timer_closure {
 	gboolean should_quit;
 };
 
-static char* zeromq_address_from_port(int port)
+static char* zeromq_address_from_port(const char* address, int port)
 {
-	return g_strdup_printf("tcp://localhost:%d", port + 10000);
+	return g_strdup_printf("tcp://%s:%d", address, port + 10000);
 }
 
 static gboolean close_socket(void* sock)
 {
 	if (!sock) return TRUE;
 
-	if (!zmq_close(sock)) {
+	if (zmq_close(sock) == -1) {
 		g_warning("Failed to close socket: %s", zmq_strerror(zmq_errno()));
 		return FALSE;
 	}
@@ -63,8 +63,14 @@ static gboolean close_socket(void* sock)
 static gboolean send_client_message(void* zmq_context, const char* message, const char* address)
 {
 	gboolean ret = TRUE;
-	int linger = 5*1000;
+	int linger = 15*1000;
 	void* sock = zmq_socket(zmq_context, ZMQ_REQ);
+
+	if (!sock) {
+		g_warning("Failed to create socket: %s", zmq_strerror(zmq_errno()));
+		return FALSE;
+	}
+
 	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
 
 	g_warning("Connecting to %s", address);
@@ -73,11 +79,16 @@ static gboolean send_client_message(void* zmq_context, const char* message, cons
 		ret = FALSE; goto out;
 	}
 
-	usleep(1);
-
 	zmq_msg_t msg;
-	zmq_msg_init_data(&msg, message, sizeof(char) * strlen(message), NULL, NULL);
-	zmq_send(sock, &msg, ZMQ_NOBLOCK);
+	zmq_msg_init_data(&msg, (void*) message, sizeof(char) * strlen(message), NULL, NULL);
+	zmq_msg_send(&msg, sock, 0);
+	zmq_msg_close(&msg);
+
+	zmq_msg_t rep_msg;
+	zmq_msg_init(&rep_msg);
+	zmq_msg_recv(&rep_msg, sock, 0);
+	g_warning("Reply: %s", (char*)zmq_msg_data(&rep_msg));
+	zmq_msg_close(&rep_msg);
 
 out:
 	close_socket(sock);
@@ -98,12 +109,10 @@ static gboolean handle_incoming_messages(gpointer user_data)
 	}
 
 	zmq_msg_init(&msg);
-	g_warning("Tick");
-	if (zmq_recv(zmq_sock, &msg, ZMQ_NOBLOCK) == -1) {
+	if (zmq_msg_recv(&msg, zmq_sock, ZMQ_DONTWAIT) == -1) {
 		switch (zmq_errno()) {
 		case EAGAIN:
 		case EINTR:
-		case EFSM:
 			ret = TRUE;
 			goto out;
 		default:
@@ -114,7 +123,14 @@ static gboolean handle_incoming_messages(gpointer user_data)
 		}
 	}
 
-	g_warning("Message recieved: %s", zmq_msg_data(&msg));
+	/* XXX: This is Danger Zone™, we aren't guaranteed this is NULL terminated */
+	g_warning("Message recieved: %s", (char*)zmq_msg_data(&msg));
+
+	const char* data = "200";
+	zmq_msg_t rep_msg;
+	zmq_msg_init_data(&rep_msg, (void*)data, sizeof(char) * strlen(data), NULL, NULL);
+	zmq_msg_send(&rep_msg, zmq_sock, ZMQ_DONTWAIT);
+	zmq_msg_close(&rep_msg);
 
 out:
 	zmq_msg_close(&msg);
@@ -146,8 +162,8 @@ int main (int argc, char **argv)
 		goto out;
 	}
 
-	zmq_ctx = zmq_init(1);
-	char* address = zeromq_address_from_port(icecast_port);
+	zmq_ctx = zmq_ctx_new();
+	char* address = zeromq_address_from_port("127.0.0.1", icecast_port);
 
 	if (client_message) {
 		ret = send_client_message(zmq_ctx, client_message, address) ? 0 : 1;
@@ -156,9 +172,15 @@ int main (int argc, char **argv)
 
 	int linger = 5*1000;
 	sock = zmq_socket(zmq_ctx, ZMQ_REP);
+
+	if (!sock) {
+		g_warning("Failing to create socket %s", zmq_strerror(zmq_errno()));
+		goto out;
+	}
+
 	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
 
-	if (!zmq_bind(sock, address)) {
+	if (zmq_bind(sock, address) == -1) {
 		g_warning("Failed to start server on address %s: %s", address, zmq_strerror(zmq_errno()));
 		goto out;
 	}
@@ -171,6 +193,7 @@ int main (int argc, char **argv)
 	g_timeout_add(250, handle_incoming_messages, &closure);
 
 	g_unix_signal_add(SIGINT, handle_sigint, &closure.should_quit);
+	g_unix_signal_add(SIGTERM, handle_sigint, &closure.should_quit);
 
 	g_warning("Starting Main Loop");
 	g_main_loop_run(main_loop);
@@ -178,7 +201,7 @@ int main (int argc, char **argv)
 
 out:
 	close_socket(sock);
-	if (zmq_ctx) zmq_term(zmq_ctx);
+	if (zmq_ctx) zmq_ctx_destroy(zmq_ctx);
 	if (address) g_free(address);
 
 	g_option_context_free(ctx);

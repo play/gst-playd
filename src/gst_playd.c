@@ -74,7 +74,7 @@ static gboolean send_client_message(void* zmq_context, const char* message, cons
 
 	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
 
-	g_print("Connecting to %s", address);
+	g_print("Connecting to %s\n", address);
 	if (zmq_connect(sock, address) == -1) {
 		g_warning("Failed to connect: %s", zmq_strerror(zmq_errno()));
 		ret = FALSE; goto out;
@@ -88,7 +88,7 @@ static gboolean send_client_message(void* zmq_context, const char* message, cons
 	zmq_msg_t rep_msg;
 	zmq_msg_init(&rep_msg);
 	zmq_msg_recv(&rep_msg, sock, 0);
-	g_print("Reply: %s", (char*)zmq_msg_data(&rep_msg));
+	g_print("Reply: %s\n", (char*)zmq_msg_data(&rep_msg));
 	zmq_msg_close(&rep_msg);
 
 out:
@@ -125,7 +125,7 @@ static gboolean handle_incoming_messages(gpointer user_data)
 	}
 
 	/* XXX: This is Danger Zone™, we aren't guaranteed this is NULL terminated */
-	g_print("Message recieved: %s", (char*)zmq_msg_data(&msg));
+	g_print("Message recieved: %s\n", (char*)zmq_msg_data(&msg));
 
 	const char* data = "200";
 	zmq_msg_t rep_msg;

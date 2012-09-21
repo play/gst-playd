@@ -1,4 +1,4 @@
-/* 
+/*
    gst_playd - GStreamer backend for Play
 
    Copyright (C) 2012 Paul Betts
@@ -15,10 +15,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software Foundation,
-   Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+   Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
 #include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 
 #include <glib.h>
@@ -43,16 +44,16 @@ struct timer_closure {
 	gboolean should_quit;
 };
 
-static char* zeromq_address_from_port(int port)
+static char* zeromq_address_from_port(const char* address, int port)
 {
-	return g_strdup_printf("tcp://localhost:%d", port + 10000);
+    return g_strdup_printf("tcp://%s:%d", address, port + 10000);
 }
 
 static gboolean close_socket(void* sock)
 {
 	if (!sock) return TRUE;
 
-	if (!zmq_close(sock)) {
+	if (zmq_close(sock) == -1) {
 		g_warning("Failed to close socket: %s", zmq_strerror(zmq_errno()));
 		return FALSE;
 	}
@@ -60,11 +61,18 @@ static gboolean close_socket(void* sock)
 	return TRUE;
 }
 
-static gboolean send_client_message(void* zmq_context, const char* message, const char* address)
+static gboolean send_client_message(void* zmq_context, const char* address, const char* message)
 {
 	gboolean ret = TRUE;
 	int linger = 5*1000;
+
 	void* sock = zmq_socket(zmq_context, ZMQ_REQ);
+
+	if(!sock) {
+	  g_warning("Failed to create socket: %s", zmq_strerror(zmq_errno()));
+	  return FALSE;
+	}
+
 	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
 
 	g_warning("Connecting to %s", address);
@@ -73,14 +81,20 @@ static gboolean send_client_message(void* zmq_context, const char* message, cons
 		ret = FALSE; goto out;
 	}
 
-	usleep(1);
-
 	zmq_msg_t msg;
-	zmq_msg_init_data(&msg, message, sizeof(char) * strlen(message), NULL, NULL);
-	zmq_send(sock, &msg, ZMQ_NOBLOCK);
+	size_t msg_size = sizeof(char) * strlen(message);
+	zmq_msg_init_data(&msg, (void*)message, msg_size, NULL, NULL);
+	zmq_msg_send(&msg, sock, ZMQ_DONTWAIT);
+	zmq_msg_close(&msg);
 
+
+	zmq_msg_t rep_msg;
+	zmq_msg_init(&rep_msg);
+	zmq_msg_recv(&rep_msg, sock, 0);
+	g_warning("Reply: %s", (char*)zmq_msg_data(&rep_msg));
+	zmq_msg_close(&rep_msg);
 out:
-	close_socket(sock);
+	zmq_close(sock);
 	return ret;
 }
 
@@ -98,8 +112,8 @@ static gboolean handle_incoming_messages(gpointer user_data)
 	}
 
 	zmq_msg_init(&msg);
-	g_warning("Tick");
-	if (zmq_recv(zmq_sock, &msg, ZMQ_NOBLOCK) == -1) {
+	//g_warning("Tick");
+	if (zmq_msg_recv(&msg, zmq_sock, ZMQ_DONTWAIT) == -1) {
 		switch (zmq_errno()) {
 		case EAGAIN:
 		case EINTR:
@@ -114,11 +128,18 @@ static gboolean handle_incoming_messages(gpointer user_data)
 		}
 	}
 
-	g_warning("Message recieved: %s", zmq_msg_data(&msg));
+	g_warning("Message recieved: %s", (char*)zmq_msg_data(&msg));
+
+	zmq_msg_t rep_msg;
+	const char* data = "Yo.";
+	size_t msg_size = sizeof(char) * strlen(data);
+	zmq_msg_init_data(&rep_msg, (void*)data, msg_size, NULL, NULL);
+	zmq_msg_send(&rep_msg, zmq_sock, ZMQ_DONTWAIT);
+	zmq_msg_close(&rep_msg);
 
 out:
-	zmq_msg_close(&msg);
-	return TRUE;
+zmq_msg_close(&msg);
+	return ret;
 }
 
 static void handle_sigint(void* shouldquit)
@@ -137,6 +158,8 @@ int main (int argc, char **argv)
 	void* zmq_ctx = NULL;
 	void* sock = NULL;
 
+	char* address = zeromq_address_from_port("*", icecast_port);
+
 	ctx = g_option_context_new(" - A GStreamer backend daemon for Play");
 	g_option_context_add_main_entries(ctx, entries, "");
 
@@ -146,21 +169,28 @@ int main (int argc, char **argv)
 		goto out;
 	}
 
-	zmq_ctx = zmq_init(1);
-	char* address = zeromq_address_from_port(icecast_port);
+	zmq_ctx = zmq_ctx_new();
+
+	sock = zmq_socket(zmq_ctx, ZMQ_REP);
+
+	if(!sock) {
+	  g_warning("Failing to create socket %s", zmq_strerror(zmq_errno()));
+	}
+
+        int linger = 5*1000;
+	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
 
 	if (client_message) {
-		ret = send_client_message(zmq_ctx, client_message, address) ? 0 : 1;
+	    char* client_address = zeromq_address_from_port("localhost", icecast_port);
+	        ret = send_client_message(zmq_ctx, client_address, client_message) ? 0 : 1;
+		free((void*)client_address);
 		goto out;
 	}
 
-	int linger = 5*1000;
-	sock = zmq_socket(zmq_ctx, ZMQ_REP);
-	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
 
-	if (!zmq_bind(sock, address)) {
-		g_warning("Failed to start server on address %s: %s", address, zmq_strerror(zmq_errno()));
-		goto out;
+	if (zmq_bind(sock, address) == -1) {
+	  g_warning("Failed to start server on address %s: %s", address, zmq_strerror(zmq_errno()));
+	  goto out;
 	}
 
 	/* Server Mainloop */
@@ -171,6 +201,7 @@ int main (int argc, char **argv)
 	g_timeout_add(250, handle_incoming_messages, &closure);
 
 	g_unix_signal_add(SIGINT, handle_sigint, &closure.should_quit);
+	g_unix_signal_add(SIGTERM, handle_sigint, &closure.should_quit);
 
 	g_warning("Starting Main Loop");
 	g_main_loop_run(main_loop);
@@ -178,8 +209,8 @@ int main (int argc, char **argv)
 
 out:
 	close_socket(sock);
-	if (zmq_ctx) zmq_term(zmq_ctx);
-	if (address) g_free(address);
+	if (zmq_ctx) zmq_ctx_destroy(zmq_ctx);
+	if (address) g_free((void*)address);
 
 	g_option_context_free(ctx);
 	return ret;

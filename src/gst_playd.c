@@ -154,10 +154,12 @@ int main (int argc, char **argv)
 	void* zmq_ctx = NULL;
 	void* sock = NULL;
 
-	gst_init(&argc, &argv);
+	g_thread_init(NULL);
 
 	ctx = g_option_context_new(" - A GStreamer backend daemon for Play");
 	g_option_context_add_main_entries(ctx, entries, "");
+
+	g_option_context_add_group(ctx, gst_init_get_option_group());
 
 	if (!g_option_context_parse(ctx, &argc, &argv, &err)) {
 		g_error("Option parsing failed: %s", err->message);

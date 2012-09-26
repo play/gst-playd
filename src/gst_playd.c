@@ -25,6 +25,8 @@
 #include <glib.h>
 #include <zmq.h>
 
+#include "parser.h"
+
 #define EXIT_FAILURE 1
 
 static gboolean verbose = FALSE;
@@ -88,7 +90,12 @@ static gboolean send_client_message(void* zmq_context, const char* message, cons
 	zmq_msg_t rep_msg;
 	zmq_msg_init(&rep_msg);
 	zmq_msg_recv(&rep_msg, sock, 0);
-	g_print("Reply: %s\n", (char*)zmq_msg_data(&rep_msg));
+
+	char* rep_text = g_new0(char, zmq_msg_size(&rep_msg) + 1);
+	memcpy(rep_text, zmq_msg_data(&rep_msg), zmq_msg_size(&rep_msg));
+
+	g_print("Reply: %s\n", rep_text);
+	g_free(rep_text);
 	zmq_msg_close(&rep_msg);
 
 out:
@@ -96,10 +103,16 @@ out:
 	return ret;
 }
 
+static void zmq_glib_free(void* to_free, void* hint)
+{
+	g_free(to_free);
+}
+
 static int handle_message(void* zmq_sock)
 {
 	int ret = 0;
 	zmq_msg_t msg;
+	char* message_text = NULL;
 
 	zmq_msg_init(&msg);
 	if (zmq_msg_recv(&msg, zmq_sock, ZMQ_DONTWAIT) == -1) {
@@ -116,19 +129,21 @@ static int handle_message(void* zmq_sock)
 		}
 	}
 
-	/* XXX: This is Danger Zone™, we aren't guaranteed this is NULL terminated */
-	g_print("Message recieved: %s\n", (char*)zmq_msg_data(&msg));
+	message_text = g_new0(char, zmq_msg_size(&msg) + 1);
+	memcpy(message_text, zmq_msg_data(&msg), zmq_msg_size(&msg));
 
-	const char* data = "200";
+	char* data = parse_message(message_text);
+	g_warning("About to send reply: %s", data);
+
 	zmq_msg_t rep_msg;
-	zmq_msg_init_data(&rep_msg, (void*)data, sizeof(char) * strlen(data), NULL, NULL);
-	zmq_msg_send(&rep_msg, zmq_sock, ZMQ_DONTWAIT);
+	zmq_msg_init_data(&rep_msg, (void*)data, sizeof(char) * strlen(data), zmq_glib_free, NULL);
+	zmq_msg_send(&rep_msg, zmq_sock, 0);
 	zmq_msg_close(&rep_msg);
 
 out:
+	if (message_text) g_free(message_text);
 	zmq_msg_close(&msg);
 	return ret;
-
 }
 
 static gboolean handle_incoming_messages(gpointer user_data)

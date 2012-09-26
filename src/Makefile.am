@@ -2,6 +2,8 @@ bin_PROGRAMS=gst_playd
 
 gst_playd_SOURCES= \
 	gst_playd.c \
+	parser.c \
+	operations.c \
 	gst_playd.1 \
 	aclocal.m4
 

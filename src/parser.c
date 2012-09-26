@@ -20,8 +20,9 @@
 
 #include <glib.h>
 #include <string.h>
+
 #include "parser.h"
-//#include "operations.h"
+#include "operations.h"
 
 struct message_dispatch {
 	const char* prefix;
@@ -29,6 +30,7 @@ struct message_dispatch {
 };
 
 static struct message_dispatch messages[] = {
+	"PING", op_ping,
 	{ NULL },
 };
 
@@ -60,10 +62,12 @@ char* parse_message(const char* message)
 
 		g_free(ret);
 		ret = (*(cur->func))(param);
+		g_free(param);
 		break;
 	}
 
 out:
+	if (prefix) g_free(prefix);
 	if (match_info) g_match_info_free(match_info);
 	g_regex_unref(msg_regex);
 	return ret;

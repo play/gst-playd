@@ -30,7 +30,7 @@ struct message_dispatch {
 };
 
 static struct message_dispatch messages[] = {
-	"PING", op_ping,
+	{ "PING", op_ping, },
 	{ NULL },
 };
 

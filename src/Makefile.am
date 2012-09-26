@@ -9,6 +9,7 @@ gst_playd_SOURCES= \
 
 #  uncomment the following if gst_playd requires the math library
 gst_playd_CFLAGS = \
+	-Wall \
 	$(GLIB_CFLAGS) \
 	$(LIBZMQ_CFLAGS) \
 	$(GST_CFLAGS)

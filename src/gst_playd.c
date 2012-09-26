@@ -25,6 +25,10 @@
 #include <glib.h>
 #include <zmq.h>
 
+#ifdef G_OS_UNIX
+#include <glib-unix.h>
+#endif
+
 #include "parser.h"
 
 #define EXIT_FAILURE 1
@@ -163,10 +167,12 @@ static gboolean handle_incoming_messages(gpointer user_data)
 	return TRUE;
 }
 
-static void handle_sigint(void* shouldquit)
+static gboolean handle_sigint(void* shouldquit)
 {
 	gboolean* should_quit = shouldquit;
 	*should_quit = TRUE;
+
+	return TRUE;
 }
 
 int main (int argc, char **argv)
@@ -224,8 +230,10 @@ int main (int argc, char **argv)
 	struct timer_closure closure = { sock, parser, main_loop, FALSE, };
 	g_timeout_add(250, handle_incoming_messages, &closure);
 
+#ifdef G_OS_UNIX
 	g_unix_signal_add(SIGINT, handle_sigint, &closure.should_quit);
 	g_unix_signal_add(SIGTERM, handle_sigint, &closure.should_quit);
+#endif
 
 	g_warning("Starting Main Loop");
 	g_main_loop_run(main_loop);

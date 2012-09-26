@@ -26,15 +26,55 @@
 
 struct message_dispatch {
 	const char* prefix;
-	char* (*func)(const char*);
+	void* (*op_new)();
+	char* (*op_parse)(const char*, void*);
+	void (*op_free)(void* ctx);
+};
+
+struct parse_ctx {
+	GHashTable* ctx_table;
 };
 
 static struct message_dispatch messages[] = {
-	{ "PING", op_ping, },
+	{ "PING", op_ping_new, op_ping_parse, op_ping_free, },
 	{ NULL },
 };
 
-char* parse_message(const char* message)
+struct parse_ctx* parse_new(void)
+{
+	struct parse_ctx* ret = g_new0(struct parse_ctx, 1);
+
+	ret->ctx_table = g_hash_table_new(g_str_hash, g_str_equal);
+
+	struct message_dispatch* cur = messages;
+	do {
+		void* ctx = (*cur->op_new)();
+		g_hash_table_insert(ret->ctx_table, cur->prefix, ctx);
+	} while ((++cur)->prefix);
+
+	return ret;
+}
+
+static void free_ctx_func(gpointer key, gpointer value, gpointer user_data)
+{
+	struct message_dispatch* cur = messages;
+	do {
+		char* param = NULL;
+		if (strcmp(cur->prefix, key)) continue;
+
+		(*cur->op_free)(value);
+		break;
+	} while ((++cur)->prefix);
+}
+
+void parse_free(struct parse_ctx* ctx)
+{
+	g_hash_table_foreach(ctx->ctx_table, free_ctx_func, NULL);
+	g_hash_table_destroy(ctx->ctx_table);
+	g_free(ctx);
+}
+
+char* parse_message(struct parse_ctx* ctx, const char* message)
 {
 	char* ret = strdup("FAIL Message is Invalid");
 
@@ -54,17 +94,19 @@ char* parse_message(const char* message)
 	}
 
 	struct message_dispatch* cur = messages;
-	while (cur->prefix) {
+	do {
 		char* param = NULL;
 		if (strcmp(cur->prefix, prefix)) continue;
 
 		param = g_match_info_fetch(match_info, 2);
 
+		void* op_ctx = g_hash_table_lookup(ctx->ctx_table, prefix);
+
 		g_free(ret);
-		ret = (*(cur->func))(param);
+		ret = (*cur->op_parse)(param, op_ctx);
 		g_free(param);
 		break;
-	}
+	} while ((++cur)->prefix);
 
 out:
 	if (prefix) g_free(prefix);

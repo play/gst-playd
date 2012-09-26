@@ -21,6 +21,10 @@
 #ifndef _PARSER_H
 #define _PARSER_H
 
-char* parse_message(const char* message);
+struct parse_ctx;
+
+struct parse_ctx* parse_new();
+char* parse_message(struct parse_ctx* ctx, const char* message);
+void parse_free(struct parse_ctx* ctx);
 
 #endif

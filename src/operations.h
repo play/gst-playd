@@ -1,5 +1,5 @@
 /*
-   operations.c - Message handlers
+   operations.h - Message handlers
 
    Copyright (C) 2012 Paul Betts
 
@@ -21,6 +21,8 @@
 #ifndef _OPERATIONS_H
 #define _OPERATIONS_H
 
-char* op_ping(const char* param);
+void* op_ping_new(void);
+char* op_ping_parse(const char* param, void*);
+void op_ping_free(void* ctx);
 
 #endif

@@ -20,10 +20,20 @@
 
 #include <glib.h>
 #include <string.h>
+
 #include "operations.h"
 
-char* op_ping(const char* param)
+void* op_ping_new(void)
+{
+	return NULL;
+}
+
+char* op_ping_parse(const char* param, void* dontcare)
 {
 	if (!param) param = "(none)";
 	return g_strdup_printf("OK Message was %s", param);
+}
+
+void op_ping_free(void* dontcare)
+{
 }

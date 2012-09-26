@@ -42,6 +42,7 @@ static GOptionEntry entries[] = {
 
 struct timer_closure {
 	void* zmq_socket;
+	struct parse_ctx* parse_ctx;
 	GMainLoop* main_loop;
 	gboolean should_quit;
 };
@@ -108,7 +109,7 @@ static void zmq_glib_free(void* to_free, void* hint)
 	g_free(to_free);
 }
 
-static int handle_message(void* zmq_sock)
+static int handle_message(void* zmq_sock, struct parse_ctx* parser)
 {
 	int ret = 0;
 	zmq_msg_t msg;
@@ -132,7 +133,7 @@ static int handle_message(void* zmq_sock)
 	message_text = g_new0(char, zmq_msg_size(&msg) + 1);
 	memcpy(message_text, zmq_msg_data(&msg), zmq_msg_size(&msg));
 
-	char* data = parse_message(message_text);
+	char* data = parse_message(parser, message_text);
 	g_warning("About to send reply: %s", data);
 
 	zmq_msg_t rep_msg;
@@ -149,14 +150,13 @@ out:
 static gboolean handle_incoming_messages(gpointer user_data)
 {
 	struct timer_closure* closure = (struct timer_closure*) user_data;
-	void* zmq_sock = closure->zmq_socket;
 
 	if (closure->should_quit) {
 		g_main_loop_quit(closure->main_loop);
 		return FALSE;
 	}
 
-	while (handle_message(zmq_sock) == 0) {
+	while (handle_message(closure->zmq_socket, closure->parse_ctx) == 0) {
 		g_debug("Processing new message");
 	}
 
@@ -215,11 +215,13 @@ int main (int argc, char **argv)
 		goto out;
 	}
 
+	struct parse_ctx* parser = parse_new();
+
 	/* Server Mainloop */
 
 	GMainLoop* main_loop = g_main_loop_new(NULL, FALSE);
 
-	struct timer_closure closure = { sock, main_loop, FALSE, };
+	struct timer_closure closure = { sock, parser, main_loop, FALSE, };
 	g_timeout_add(250, handle_incoming_messages, &closure);
 
 	g_unix_signal_add(SIGINT, handle_sigint, &closure.should_quit);
@@ -228,6 +230,8 @@ int main (int argc, char **argv)
 	g_warning("Starting Main Loop");
 	g_main_loop_run(main_loop);
 	g_warning("Bailing");
+
+	parse_free(parser);
 
 out:
 	close_socket(sock);

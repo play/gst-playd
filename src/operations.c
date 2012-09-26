@@ -24,5 +24,6 @@
 
 char* op_ping(const char* param)
 {
+	if (!param) param = "(none)";
 	return g_strdup_printf("OK Message was %s", param);
 }

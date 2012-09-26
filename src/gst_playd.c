@@ -96,30 +96,22 @@ out:
 	return ret;
 }
 
-static gboolean handle_incoming_messages(gpointer user_data)
+static int handle_message(void* zmq_sock)
 {
-	gboolean ret = TRUE;
-
-	struct timer_closure* closure = (struct timer_closure*) user_data;
-	void* zmq_sock = closure->zmq_socket;
+	int ret = 0;
 	zmq_msg_t msg;
-
-	if (closure->should_quit) {
-		g_main_loop_quit(closure->main_loop);
-		return FALSE;
-	}
 
 	zmq_msg_init(&msg);
 	if (zmq_msg_recv(&msg, zmq_sock, ZMQ_DONTWAIT) == -1) {
-		switch (zmq_errno()) {
+		switch (ret = zmq_errno()) {
 		case EAGAIN:
+			goto out;
 		case EINTR:
-			ret = TRUE;
+			/* We'll pretend we "succeeded" so we'll look for a new message */
+			ret = 0;
 			goto out;
 		default:
-			g_warning("Failed to recieve message: %s", zmq_strerror(zmq_errno()));
-			g_main_loop_quit(closure->main_loop);
-			ret = FALSE;
+			g_warning("Failed to recieve message: 0x%x (%s)", ret, zmq_strerror(ret));
 			goto out;
 		}
 	}
@@ -135,6 +127,24 @@ static gboolean handle_incoming_messages(gpointer user_data)
 
 out:
 	zmq_msg_close(&msg);
+	return ret;
+
+}
+
+static gboolean handle_incoming_messages(gpointer user_data)
+{
+	struct timer_closure* closure = (struct timer_closure*) user_data;
+	void* zmq_sock = closure->zmq_socket;
+
+	if (closure->should_quit) {
+		g_main_loop_quit(closure->main_loop);
+		return FALSE;
+	}
+
+	while (handle_message(zmq_sock) == 0) {
+		g_debug("Processing new message");
+	}
+
 	return TRUE;
 }
 

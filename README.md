@@ -35,5 +35,14 @@ starting up and configuring the Icecast server (including tying the lifetime
 of the icecast process to gst-playd, so if gst-playd dies, it kills the
 associated icecasts on its way out)
 
-Supposedly, GStreamer can stream directly to Airport Expresses via `apexsink`,
-but this may have been subject to bitrot.
+## How do I build this?
+
+On OS X:
+
+```sh
+brew install zeromq --head
+brew install gst-plugins-good gst-plugins-ugly
+brew link libxml2
+
+./autogen.sh && make
+```

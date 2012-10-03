@@ -49,7 +49,7 @@ struct parse_ctx* parse_new(void)
 	struct message_dispatch* cur = messages;
 	do {
 		void* ctx = (*cur->op_new)();
-		g_hash_table_insert(ret->ctx_table, cur->prefix, ctx);
+		g_hash_table_insert(ret->ctx_table, (gpointer)cur->prefix, ctx);
 	} while ((++cur)->prefix);
 
 	return ret;
@@ -59,7 +59,6 @@ static void free_ctx_func(gpointer key, gpointer value, gpointer user_data)
 {
 	struct message_dispatch* cur = messages;
 	do {
-		char* param = NULL;
 		if (strcmp(cur->prefix, key)) continue;
 
 		(*cur->op_free)(value);

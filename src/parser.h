@@ -23,8 +23,24 @@
 
 struct parse_ctx;
 
+typedef char* (*parse_handler_cb) (const char* prefix, void* ctx);
+
+struct message_dispatch_entry {
+	const char* prefix;
+	parse_handler_cb op_parse;
+};
+
+struct parser_plugin_entry {
+	const char* friendly_name;
+
+	void* (*plugin_new)(void);
+	gboolean (*plugin_register)(void* ctx, struct message_dispatch_entry** entries);
+	void (*plugin_free)(void* ctx);
+};
+
 struct parse_ctx* parse_new();
-char* parse_message(struct parse_ctx* ctx, const char* message);
-void parse_free(struct parse_ctx* ctx);
+void parse_free(struct parse_ctx* parser);
+gboolean parse_register_plugin(struct parse_ctx* parser, struct parser_plugin_entry* plugin);
+char* parse_message(struct parse_ctx* parser, const char* message);
 
 #endif

@@ -41,7 +41,7 @@ On OS X:
 
 ```sh
 brew install zeromq --head
-brew install gst-plugins-good gst-plugins-ugly
+brew install gst-plugins-good gst-plugins-ugly gst-ffmpeg  ## Get some coffee.
 brew link libxml2
 
 ./autogen.sh && make

@@ -23,6 +23,7 @@
 #include <sys/uio.h>
 #include <string.h>
 #include <glib.h>
+#include <gst/gst.h>
 #include <zmq.h>
 
 #ifdef G_OS_UNIX
@@ -185,12 +186,14 @@ int main (int argc, char **argv)
 	void* zmq_ctx = NULL;
 	void* sock = NULL;
 
-	g_thread_init(NULL);
+	//g_thread_init(NULL);
 
 	ctx = g_option_context_new(" - A GStreamer backend daemon for Play");
 	g_option_context_add_main_entries(ctx, entries, "");
 
-	g_option_context_add_group(ctx, gst_init_get_option_group());
+	GOptionGroup* grp = gst_init_get_option_group();
+	g_warning("grp = 0x%p", grp);
+	g_option_context_add_group(ctx, grp);
 
 	if (!g_option_context_parse(ctx, &argc, &argv, &err)) {
 		g_error("Option parsing failed: %s", err->message);

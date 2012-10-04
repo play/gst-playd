@@ -31,6 +31,7 @@
 #endif
 
 #include "parser.h"
+#include "operations.h"
 
 #define EXIT_FAILURE 1
 
@@ -50,6 +51,11 @@ struct timer_closure {
 	struct parse_ctx* parse_ctx;
 	GMainLoop* main_loop;
 	gboolean should_quit;
+};
+
+static struct parser_plugin_entry parser_operations[] = {
+	{ "Ping", op_ping_new, op_ping_register, op_ping_free },
+	{ NULL },
 };
 
 static char* zeromq_address_from_port(const char* address, int port)
@@ -225,6 +231,11 @@ int main (int argc, char **argv)
 	}
 
 	struct parse_ctx* parser = parse_new();
+	struct parser_plugin_entry* op = parser_operations;
+
+	while ((op++)->friendly_name) {
+		parse_register_plugin(parser, op);
+	}
 
 	/* Server Mainloop */
 

@@ -92,8 +92,6 @@ gboolean parse_register_plugin(struct parse_ctx* parser, struct parser_plugin_en
 		g_hash_table_insert(parser->message_table, prefix, r_entry);
 	}
 
-	g_free(regd_messages);
-
 	return TRUE;
 }
 

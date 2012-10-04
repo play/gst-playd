@@ -81,13 +81,13 @@ gboolean parse_register_plugin(struct parse_ctx* parser, struct parser_plugin_en
 	p_entry->plugin_free = plugin->plugin_free;
 	parser->plugin_list = g_slist_prepend(parser->plugin_list, p_entry);
 
-	while (*(regd_messages++)->prefix) {
+	for (struct message_dispatch_entry* msg = regd_messages; msg->prefix; msg++) {
 		r_entry = g_new0(struct reg_entry_with_ctx, 1);
-		prefix = strdup(regd_messages->prefix);
+		prefix = strdup(msg->prefix);
 
 		r_entry->prefix = prefix;
 		r_entry->plugin_context = plugin_ctx;
-		r_entry->parser = regd_messages->op_parse;
+		r_entry->parser = msg->op_parse;
 
 		g_hash_table_insert(parser->message_table, prefix, r_entry);
 	}

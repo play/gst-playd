@@ -231,9 +231,9 @@ int main (int argc, char **argv)
 	}
 
 	struct parse_ctx* parser = parse_new();
-	struct parser_plugin_entry* op = parser_operations;
+	
 
-	while ((op++)->friendly_name) {
+	for (struct parser_plugin_entry* op = parser_operations; op->friendly_name; op++) {
 		parse_register_plugin(parser, op);
 	}
 

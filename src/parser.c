@@ -92,7 +92,7 @@ gboolean parse_register_plugin(struct parse_ctx* parser, struct parser_plugin_en
 		g_hash_table_insert(parser->message_table, prefix, r_entry);
 	}
 
-	g_print("Registered plugin: %s", plugin->friendly_name);
+	g_print("Registered plugin: %s\n", plugin->friendly_name);
 	return TRUE;
 }
 

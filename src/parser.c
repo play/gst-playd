@@ -22,7 +22,6 @@
 #include <string.h>
 
 #include "parser.h"
-#include "operations.h"
 
 struct reg_entry_with_ctx {
 	const char* prefix;
@@ -34,16 +33,14 @@ struct reg_entry_with_ctx {
 struct plugin_entry_with_ctx {
 	void *ctx;
 	void (*plugin_free)(void* ctx);
-}
+};
 
 struct parse_ctx {
 	GHashTable* message_table; 	/* prefix -> reg_entry_with_ctx */
 	GSList* plugin_list; 		/* list of plugin_entry_with_ctx */
 };
 
-static struct reg_entry_with_ctx* reg_entry_new(const char* prefix, void* plugin_context, parse_handler_cb parser);
-static void reg_entry_free(struct reg_entry_with_entry* entry);
-static void plugin_entry_free(struct plugin_entry_with_ctx* entry);
+static void plugin_entry_free(void* entry);
 
 struct parse_ctx* parse_new(void)
 {
@@ -58,21 +55,23 @@ struct parse_ctx* parse_new(void)
 void parse_free(struct parse_ctx* parser)
 {
 	g_hash_table_destroy(parser->message_table);
-	g_slist_free_full(parser->plugin_context, plugin_entry_free);
+	g_slist_free_full(parser->plugin_list, plugin_entry_free);
 
 	g_free(parser);
 }
 
 gboolean parse_register_plugin(struct parse_ctx* parser, struct parser_plugin_entry* plugin)
 {
-	void* plugin_ctx = *(plugin->plugin_new)();
-	struct message_dispatch* regd_messages = NULL;
+	void* plugin_ctx = (*plugin->plugin_new)();
+
+	struct message_dispatch_entry* regd_messages = NULL;
 	struct plugin_entry_with_ctx* p_entry;
 	struct reg_entry_with_ctx* r_entry;
+	char* prefix;
 
-	if (!(*(plugin->plugin_register)(plugin_ctx, &regd_messages))) {
+	if (!(*plugin->plugin_register)(plugin_ctx, &regd_messages)) {
 		g_warning("plugin failed to register: %s", plugin->friendly_name);
-		*(plugin->plugin_free(plugin_ctx));
+		(*plugin->plugin_free)(plugin_ctx);
 
 		return FALSE;
 	}
@@ -82,16 +81,20 @@ gboolean parse_register_plugin(struct parse_ctx* parser, struct parser_plugin_en
 	p_entry->plugin_free = plugin->plugin_free;
 	parser->plugin_list = g_slist_prepend(parser->plugin_list, p_entry);
 
-	while (*(regd_messages)++) {
+	while (*(regd_messages++)->prefix) {
 		r_entry = g_new0(struct reg_entry_with_ctx, 1);
-		r_entry->prefix = strdup(regd_messages->prefix);
+		prefix = strdup(regd_messages->prefix);
+
+		r_entry->prefix = prefix;
 		r_entry->plugin_context = plugin_ctx;
 		r_entry->parser = regd_messages->op_parse;
 
-		g_hash_table_insert(parser->message_table, r_entry->prefix, r_entry);
+		g_hash_table_insert(parser->message_table, prefix, r_entry);
 	}
 
 	g_free(regd_messages);
+
+	return TRUE;
 }
 
 char* parse_message(struct parse_ctx* parser, const char* message)
@@ -101,6 +104,7 @@ char* parse_message(struct parse_ctx* parser, const char* message)
 	GError* err = NULL;
 	GRegex* msg_regex = g_regex_new("^([A-Z]+) (.+)$", 0, 0, &err);
 	char* prefix = NULL;
+	char* param;
 	struct reg_entry_with_ctx* prefix_entry;
 
 	GMatchInfo* match_info = NULL;
@@ -122,7 +126,7 @@ char* parse_message(struct parse_ctx* parser, const char* message)
 
 	param = g_match_info_fetch(match_info, 2);
 	g_free(ret); /* free the error message */
-	ret = *(prefix_entry->parser)(param, prefix_entry->plugin_context);
+	ret = (*prefix_entry->parser)(param, prefix_entry->plugin_context);
 	g_free(param);
 
 out:
@@ -133,18 +137,9 @@ out:
 	return ret;
 }
 
-static struct reg_entry_with_ctx* reg_entry_new(const char* prefix, void* plugin_context, parse_handler_cb parser)
+static void plugin_entry_free(void* entry)
 {
-	struct reg_entry_with_ctx* ret = g_new0(struct reg_entry_with_ctx, 1);
-
-	ret->prefix = strdup(prefix);
-	ret->plugin_context = plugin_context;
-	ret->parser = parser;
-	return ret;
-}
-
-static void plugin_entry_free(struct plugin_entry_with_ctx* entry)
-{
-	*(entry->plugin_free)(entry->ctx);
+	struct plugin_entry_with_ctx* e = (struct plugin_entry_with_ctx*)entry;
+	(*e->plugin_free)(e->ctx);
 	g_free(entry);
 }

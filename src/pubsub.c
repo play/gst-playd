@@ -28,6 +28,7 @@
 
 struct pubsub_ctx {
 	void* sock;
+	char* addr;
 };
 
 static char* pubsub_address_from_port(const char* address, int port)
@@ -43,23 +44,21 @@ struct pubsub_ctx* pubsub_new(void* zmq_context, int icecast_port)
 	ret->sock = zmq_socket(zmq_context, ZMQ_PUB);
 	zmq_setsockopt(ret->sock, ZMQ_LINGER, &linger, sizeof(int));
 
-	char* addr = pubsub_address_from_port("127.0.0.1", icecast_port);
-	if (zmq_bind(ret->sock, addr) == -1) {
-		g_warning("Failed to start server on address %s: %s", addr, zmq_strerror(zmq_errno()));
+	ret->addr = pubsub_address_from_port("127.0.0.1", icecast_port);
+	if (zmq_bind(ret->sock, ret->addr) == -1) {
+		g_warning("Failed to start server on address %s: %s", ret->addr, zmq_strerror(zmq_errno()));
 
 		pubsub_free(ret);
 		ret = NULL;
-		goto out;
 	}
 
-out:
-	g_free(addr);
 	return ret;
 }
 
 void pubsub_free(struct pubsub_ctx* ctx)
 {
 	util_close_socket(ctx->sock);
+	g_free(ctx->addr);
 	g_free(ctx);
 }
 

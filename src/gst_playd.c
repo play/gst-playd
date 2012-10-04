@@ -187,9 +187,7 @@ int main (int argc, char **argv)
 	ctx = g_option_context_new(" - A GStreamer backend daemon for Play");
 	g_option_context_add_main_entries(ctx, entries, "");
 
-	GOptionGroup* grp = gst_init_get_option_group();
-	g_warning("grp = 0x%p", grp);
-	g_option_context_add_group(ctx, grp);
+	g_option_context_add_group(ctx, gst_init_get_option_group());
 
 	if (!g_option_context_parse(ctx, &argc, &argv, &err)) {
 		g_error("Option parsing failed: %s", err->message);

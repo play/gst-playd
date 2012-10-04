@@ -26,4 +26,9 @@ char* op_ping_parse(const char* param, void*);
 gboolean op_ping_register(void* ctx, struct message_dispatch_entry** entries);
 void op_ping_free(void* ctx);
 
+void* op_control_new(void*);
+char* op_pubsub_parse(const char* param, void*);
+gboolean op_control_register(void* ctx, struct message_dispatch_entry** entries);
+void op_control_free(void* ctx);
+
 #endif

@@ -62,6 +62,11 @@ void pubsub_free(struct pubsub_ctx* ctx)
 	g_free(ctx);
 }
 
+const char* pubsub_get_address(struct pubsub_ctx* ctx)
+{
+	return ctx->addr;
+}
+
 gboolean pubsub_send_message(struct pubsub_ctx* ctx, const char* message)
 {
 	zmq_msg_t msg;

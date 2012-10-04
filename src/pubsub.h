@@ -25,6 +25,7 @@ struct pubsub_ctx;
 
 struct pubsub_ctx* pubsub_new(void* zmq_context, int icecast_port);
 void pubsub_free(struct pubsub_ctx* ctx);
+const char* pubsub_get_address(struct pubsub_ctx* ctx);
 gboolean pubsub_send_message(struct pubsub_ctx* ctx, const char* message);
 
 #endif

@@ -32,6 +32,7 @@
 
 #include "parser.h"
 #include "operations.h"
+#include "utility.h"
 
 #define EXIT_FAILURE 1
 
@@ -61,18 +62,6 @@ static struct parser_plugin_entry parser_operations[] = {
 static char* zeromq_address_from_port(const char* address, int port)
 {
 	return g_strdup_printf("tcp://%s:%d", address, port + 10000);
-}
-
-static gboolean close_socket(void* sock)
-{
-	if (!sock) return TRUE;
-
-	if (zmq_close(sock) == -1) {
-		g_warning("Failed to close socket: %s", zmq_strerror(zmq_errno()));
-		return FALSE;
-	}
-
-	return TRUE;
 }
 
 static gboolean send_client_message(void* zmq_context, const char* message, const char* address)
@@ -111,7 +100,7 @@ static gboolean send_client_message(void* zmq_context, const char* message, cons
 	zmq_msg_close(&rep_msg);
 
 out:
-	close_socket(sock);
+	util_close_socket(sock);
 	return ret;
 }
 
@@ -255,7 +244,7 @@ int main (int argc, char **argv)
 	parse_free(parser);
 
 out:
-	close_socket(sock);
+	util_close_socket(sock);
 	if (zmq_ctx) zmq_ctx_destroy(zmq_ctx);
 	if (address) g_free(address);
 

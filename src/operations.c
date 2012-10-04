@@ -21,7 +21,13 @@
 #include <glib.h>
 #include <string.h>
 
+#include "parser.h"
 #include "operations.h"
+
+struct message_dispatch_entry ping_messages[] = {
+	{ "PING", op_ping_parse },
+	{ NULL },
+};
 
 void* op_ping_new(void)
 {
@@ -32,6 +38,12 @@ char* op_ping_parse(const char* param, void* dontcare)
 {
 	if (!param) param = "(none)";
 	return g_strdup_printf("OK Message was %s", param);
+}
+
+gboolean op_ping_register(void* ctx, struct message_dispatch_entry** entries)
+{
+	*entries = ping_messages;
+	return TRUE;
 }
 
 void op_ping_free(void* dontcare)

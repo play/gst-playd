@@ -192,7 +192,7 @@ int main (int argc, char **argv)
 	void* zmq_ctx = NULL;
 	void* sock = NULL;
 
-	//g_thread_init(NULL);
+	g_thread_init(NULL);
 
 	ctx = g_option_context_new(" - A GStreamer backend daemon for Play");
 	g_option_context_add_main_entries(ctx, entries, "");
@@ -232,7 +232,6 @@ int main (int argc, char **argv)
 
 	struct parse_ctx* parser = parse_new();
 	
-
 	for (struct parser_plugin_entry* op = parser_operations; op->friendly_name; op++) {
 		parse_register_plugin(parser, op);
 	}

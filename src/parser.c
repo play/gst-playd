@@ -63,6 +63,37 @@ void parse_free(struct parse_ctx* parser)
 	g_free(parser);
 }
 
+gboolean parse_register_plugin(struct parse_ctx* parser, struct parser_plugin_entry* plugin)
+{
+	void* plugin_ctx = *(plugin->plugin_new)();
+	struct message_dispatch* regd_messages = NULL;
+	struct plugin_entry_with_ctx* p_entry;
+	struct reg_entry_with_ctx* r_entry;
+
+	if (!(*(plugin->plugin_register)(plugin_ctx, &regd_messages))) {
+		g_warning("plugin failed to register: %s", plugin->friendly_name);
+		*(plugin->plugin_free(plugin_ctx));
+
+		return FALSE;
+	}
+
+	p_entry = g_new0(struct plugin_entry_with_ctx, 1);
+	p_entry->ctx = plugin_ctx;
+	p_entry->plugin_free = plugin->plugin_free;
+	parser->plugin_list = g_slist_prepend(parser->plugin_list, p_entry);
+
+	while (*(regd_messages)++) {
+		r_entry = g_new0(struct reg_entry_with_ctx, 1);
+		r_entry->prefix = strdup(regd_messages->prefix);
+		r_entry->plugin_context = plugin_ctx;
+		r_entry->parser = regd_messages->op_parse;
+
+		g_hash_table_insert(parser->message_table, r_entry->prefix, r_entry);
+	}
+
+	g_free(regd_messages);
+}
+
 char* parse_message(struct parse_ctx* parser, const char* message)
 {
 	char* ret = strdup("FAIL Message is Invalid");

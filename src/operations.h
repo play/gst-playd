@@ -21,7 +21,7 @@
 #ifndef _OPERATIONS_H
 #define _OPERATIONS_H
 
-void* op_ping_new(void);
+void* op_ping_new(void*);
 char* op_ping_parse(const char* param, void*);
 gboolean op_ping_register(void* ctx, struct message_dispatch_entry** entries);
 void op_ping_free(void* ctx);

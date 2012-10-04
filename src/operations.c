@@ -29,7 +29,7 @@ struct message_dispatch_entry ping_messages[] = {
 	{ NULL },
 };
 
-void* op_ping_new(void)
+void* op_ping_new(void* dontcare)
 {
 	return NULL;
 }

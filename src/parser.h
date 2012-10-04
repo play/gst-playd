@@ -32,8 +32,9 @@ struct message_dispatch_entry {
 
 struct parser_plugin_entry {
 	const char* friendly_name;
+	void* context;
 
-	void* (*plugin_new)(void);
+	void* (*plugin_new)(void* registrar_ctx);
 	gboolean (*plugin_register)(void* ctx, struct message_dispatch_entry** entries);
 	void (*plugin_free)(void* ctx);
 };

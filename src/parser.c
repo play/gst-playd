@@ -62,7 +62,7 @@ void parse_free(struct parse_ctx* parser)
 
 gboolean parse_register_plugin(struct parse_ctx* parser, struct parser_plugin_entry* plugin)
 {
-	void* plugin_ctx = (*plugin->plugin_new)();
+	void* plugin_ctx = (*plugin->plugin_new)(plugin->context);
 
 	struct message_dispatch_entry* regd_messages = NULL;
 	struct plugin_entry_with_ctx* p_entry;

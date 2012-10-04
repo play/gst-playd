@@ -54,7 +54,7 @@ struct timer_closure {
 };
 
 static struct parser_plugin_entry parser_operations[] = {
-	{ "Ping", op_ping_new, op_ping_register, op_ping_free },
+	{ "Ping", NULL, op_ping_new, op_ping_register, op_ping_free },
 	{ NULL },
 };
 

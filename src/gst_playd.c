@@ -38,12 +38,14 @@
 #define EXIT_FAILURE 1
 
 static gboolean verbose = FALSE;
+static gboolean pubsub_listen = FALSE;
 static char* client_message = NULL;
 static int icecast_port = 8000;
 
 static GOptionEntry entries[] = {
 	 { "verbose", 'v', 0, G_OPTION_ARG_NONE, &verbose, "Be verbose", NULL },
 	 { "send-message", 's', 0, G_OPTION_ARG_STRING, &client_message, "Send a message to a running gst_playd and exit", NULL },
+	 { "events-listen", 'e', 0, G_OPTION_ARG_NONE, &pubsub_listen, "Listen to the event stream of a running gst_playd (for debugging purposes)", NULL },
 	 { "port", 'p', 0, G_OPTION_ARG_INT, &icecast_port, "Set the port that Icecast will bind to", NULL },
 	 { NULL },
 };
@@ -110,7 +112,6 @@ out:
 	return ret;
 }
 
-#if 0
 static int handle_pubsub_message(void* zmq_sock)
 {
 	int ret = 0;
@@ -142,7 +143,6 @@ out:
 	zmq_msg_close(&msg);
 	return ret;
 }
-#endif
 
 static gboolean handle_incoming_messages(gpointer user_data)
 {
@@ -153,8 +153,14 @@ static gboolean handle_incoming_messages(gpointer user_data)
 		return FALSE;
 	}
 
-	while (handle_message(closure->zmq_socket, closure->parse_ctx) == 0) {
-		g_debug("Processing new message");
+	if (closure->pubsub_mode) {
+		while (handle_pubsub_message(closure->zmq_socket) == 0) {
+			g_debug("Processing new message");
+		}
+	} else {
+		while (handle_message(closure->zmq_socket, closure->parse_ctx) == 0) {
+			g_debug("Processing new message");
+		}
 	}
 
 	return TRUE;
@@ -196,6 +202,40 @@ out:
 	return ret;
 }
 
+static void* create_pubsub_socket(void* zmq_ctx, int icecast_port)
+{
+	char* repreq_addr = zeromq_address_from_port("127.0.0.1", icecast_port);
+	char* pubsub_addr = NULL;
+	void* ret = NULL;
+	int linger = 5*1000;
+	
+	if (!(pubsub_addr = util_send_reqrep_msg(zmq_ctx, "PUBSUB", repreq_addr))) {
+		g_warning("Couldn't connect to %s to get PUB/SUB address.\nCheck to see if the server is down", repreq_addr);
+		goto out;
+	}
+
+	ret = zmq_socket(zmq_ctx, ZMQ_SUB);
+
+	if (!ret) {
+		g_warning("Failing to create socket %s", zmq_strerror(zmq_errno()));
+		goto out;
+	}
+
+	zmq_setsockopt(ret, ZMQ_LINGER, &linger, sizeof(int));
+
+	if (zmq_connect(ret, pubsub_addr) == -1) {
+		g_warning("Failed to connect to PubSub on address %s: %s", pubsub_addr, zmq_strerror(zmq_errno()));
+
+		ret = NULL;
+		goto out;
+	}
+
+out:
+	if (pubsub_addr) g_free(pubsub_addr);
+	g_free(repreq_addr);
+	return ret;
+}
+
 int main (int argc, char **argv)
 {
 	int ret = 0;
@@ -204,7 +244,7 @@ int main (int argc, char **argv)
 	GOptionContext* ctx;
 
 	void* zmq_ctx = NULL;
-	void* sock = NULL;
+	struct op_services* services = g_new0(struct op_services, 1);
 
 	g_thread_init(NULL);
 
@@ -235,29 +275,38 @@ int main (int argc, char **argv)
 		goto out;
 	}
 
-	sock = create_server_socket(zmq_ctx, icecast_port);
+	struct timer_closure closure = { NULL, NULL, NULL, FALSE, FALSE, };
 
-	struct op_services* services = g_new0(struct op_services, 1);
-	if (!(services->pub_sub = pubsub_new(zmq_ctx, icecast_port))) {
-		g_free(services);
-		goto out;
-	}
+	if (pubsub_listen) {
+		if (!(closure.zmq_socket = create_pubsub_socket(zmq_ctx, icecast_port))) {
+			goto out;
+		}
 
-	for (struct parser_plugin_entry* pp_entry = parser_operations; pp_entry->friendly_name; pp_entry++) {
-		pp_entry->context = services;
-	}
+		closure.pubsub_mode = TRUE;
+	} else {
+		if (!(services->pub_sub = pubsub_new(zmq_ctx, icecast_port))) {
+			goto out;
+		}
 
-	struct parse_ctx* parser = parse_new();
-	
-	for (struct parser_plugin_entry* op = parser_operations; op->friendly_name; op++) {
-		parse_register_plugin(parser, op);
+		for (struct parser_plugin_entry* pp_entry = parser_operations; pp_entry->friendly_name; pp_entry++) {
+			pp_entry->context = services;
+		}
+
+		struct parse_ctx* parser = parse_new();
+		
+		for (struct parser_plugin_entry* op = parser_operations; op->friendly_name; op++) {
+			parse_register_plugin(parser, op);
+		}
+
+		closure.zmq_socket = create_server_socket(zmq_ctx, icecast_port);
+		closure.parse_ctx = parser;
 	}
 
 	/* Server Mainloop */
 
 	GMainLoop* main_loop = g_main_loop_new(NULL, FALSE);
+	closure.main_loop = main_loop;
 
-	struct timer_closure closure = { sock, parser, main_loop, FALSE, FALSE, };
 	g_timeout_add(250, handle_incoming_messages, &closure);
 
 #ifdef G_OS_UNIX
@@ -269,14 +318,16 @@ int main (int argc, char **argv)
 	g_main_loop_run(main_loop);
 	g_warning("Bailing");
 
-	parse_free(parser);
-
-	pubsub_free(services->pub_sub);
+	if (!pubsub_listen) {
+		parse_free(closure.parse_ctx);
+		pubsub_free(services->pub_sub);
+	}
 
 out:
-	util_close_socket(sock);
+	util_close_socket(closure.zmq_socket);
 	if (zmq_ctx) zmq_ctx_destroy(zmq_ctx);
 
 	g_option_context_free(ctx);
+	g_free(services);
 	return ret;
 }

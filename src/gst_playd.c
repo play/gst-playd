@@ -204,11 +204,17 @@ static void* create_pubsub_socket(void* zmq_ctx, int icecast_port)
 	void* ret = NULL;
 	int linger = 5*1000;
 	
-	if (!(pubsub_addr = util_send_reqrep_msg(zmq_ctx, "PUBSUB", repreq_addr))) {
+	if (!(pubsub_addr = util_send_reqrep_msg(zmq_ctx, "PUBSUB ", repreq_addr))) {
 		g_warning("Couldn't connect to %s to get PUB/SUB address.\nCheck to see if the server is down", repreq_addr);
 		goto out;
 	}
 
+	if (pubsub_addr[0] != 'O' || pubsub_addr[1] != 'K') {
+		g_warning("Invalid server response: %s. Maybe versions have changed?", pubsub_addr);
+		goto out;
+	}
+
+	g_warning("Connecting to SUB %s", pubsub_addr+3);
 	ret = zmq_socket(zmq_ctx, ZMQ_SUB);
 
 	if (!ret) {
@@ -217,8 +223,9 @@ static void* create_pubsub_socket(void* zmq_ctx, int icecast_port)
 	}
 
 	zmq_setsockopt(ret, ZMQ_LINGER, &linger, sizeof(int));
+	zmq_setsockopt(ret, ZMQ_SUBSCRIBE, NULL, 0);
 
-	if (zmq_connect(ret, pubsub_addr) == -1) {
+	if (zmq_connect(ret, pubsub_addr+3) == -1) {
 		g_warning("Failed to connect to PubSub on address %s: %s", pubsub_addr, zmq_strerror(zmq_errno()));
 
 		ret = NULL;
@@ -239,7 +246,7 @@ int main (int argc, char **argv)
 	GOptionContext* ctx;
 
 	void* zmq_ctx = NULL;
-	struct op_services* services = g_new0(struct op_services, 1);
+	struct op_services services;
 
 	g_thread_init(NULL);
 
@@ -256,6 +263,8 @@ int main (int argc, char **argv)
 
 	zmq_ctx = zmq_ctx_new();
 
+	struct timer_closure closure = { NULL, NULL, NULL, FALSE, FALSE, };
+
 	if (client_message) {
 		char* address = zeromq_address_from_port("127.0.0.1", icecast_port);
 		char* msg = util_send_reqrep_msg(zmq_ctx, client_message, address);
@@ -270,8 +279,6 @@ int main (int argc, char **argv)
 		goto out;
 	}
 
-	struct timer_closure closure = { NULL, NULL, NULL, FALSE, FALSE, };
-
 	if (pubsub_listen) {
 		if (!(closure.zmq_socket = create_pubsub_socket(zmq_ctx, icecast_port))) {
 			goto out;
@@ -279,14 +286,14 @@ int main (int argc, char **argv)
 
 		closure.pubsub_mode = TRUE;
 	} else {
-		if (!(services->pub_sub = pubsub_new(zmq_ctx, icecast_port))) {
+		if (!(services.pub_sub = pubsub_new(zmq_ctx, icecast_port))) {
 			goto out;
 		}
 
 		for (struct parser_plugin_entry* pp_entry = parser_operations; pp_entry->friendly_name; pp_entry++) {
-			pp_entry->context = services;
+			pp_entry->context = &services;
 		}
-
+ 
 		struct parse_ctx* parser = parse_new();
 		
 		for (struct parser_plugin_entry* op = parser_operations; op->friendly_name; op++) {
@@ -315,14 +322,13 @@ int main (int argc, char **argv)
 
 	if (!pubsub_listen) {
 		parse_free(closure.parse_ctx);
-		pubsub_free(services->pub_sub);
+		pubsub_free(services.pub_sub);
 	}
 
 out:
-	util_close_socket(closure.zmq_socket);
+	if (closure.zmq_socket) util_close_socket(closure.zmq_socket);
 	if (zmq_ctx) zmq_ctx_destroy(zmq_ctx);
 
 	g_option_context_free(ctx);
-	g_free(services);
 	return ret;
 }

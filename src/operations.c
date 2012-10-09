@@ -40,9 +40,10 @@ struct message_dispatch_entry control_messages[] = {
  * Ping
  */
 
-void* op_ping_new(void* op_services)
+void* op_ping_new(void* services)
 {
-	return op_services;
+	g_warning("op_services = 0x%p", services);
+	return services;
 }
 
 gboolean op_ping_register(void* ctx, struct message_dispatch_entry** entries)
@@ -55,10 +56,11 @@ void op_ping_free(void* dontcare)
 {
 }
 
-char* op_ping_parse(const char* param, void* dontcare)
+char* op_ping_parse(const char* param, void* ctx)
 {
 	struct op_services* services = (struct op_services*)ctx;
 
+	g_warning("op_services = 0x%p", services);
 	if (!param) param = "(none)";
 	char* ret = g_strdup_printf("OK Message was %s", param);
 

@@ -67,46 +67,6 @@ static char* zeromq_address_from_port(const char* address, int port)
 	return g_strdup_printf("tcp://%s:%d", address, port + 10000);
 }
 
-static gboolean send_client_message(void* zmq_context, const char* message, const char* address)
-{
-	gboolean ret = TRUE;
-	int linger = 15*1000;
-	void* sock = zmq_socket(zmq_context, ZMQ_REQ);
-
-	if (!sock) {
-		g_warning("Failed to create socket: %s", zmq_strerror(zmq_errno()));
-		return FALSE;
-	}
-
-	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
-
-	g_print("Connecting to %s\n", address);
-	if (zmq_connect(sock, address) == -1) {
-		g_warning("Failed to connect: %s", zmq_strerror(zmq_errno()));
-		ret = FALSE; goto out;
-	}
-
-	zmq_msg_t msg;
-	zmq_msg_init_data(&msg, (void*) message, sizeof(char) * strlen(message), NULL, NULL);
-	zmq_msg_send(&msg, sock, 0);
-	zmq_msg_close(&msg);
-
-	zmq_msg_t rep_msg;
-	zmq_msg_init(&rep_msg);
-	zmq_msg_recv(&rep_msg, sock, 0);
-
-	char* rep_text = g_new0(char, zmq_msg_size(&rep_msg) + 1);
-	memcpy(rep_text, zmq_msg_data(&rep_msg), zmq_msg_size(&rep_msg));
-
-	g_print("Reply: %s\n", rep_text);
-	g_free(rep_text);
-	zmq_msg_close(&rep_msg);
-
-out:
-	util_close_socket(sock);
-	return ret;
-}
-
 static void zmq_glib_free(void* to_free, void* hint)
 {
 	g_free(to_free);
@@ -263,8 +223,14 @@ int main (int argc, char **argv)
 
 	if (client_message) {
 		char* address = zeromq_address_from_port("127.0.0.1", icecast_port);
+		char* msg = util_send_reqrep_msg(zmq_ctx, client_message, address);
 
-		ret = send_client_message(zmq_ctx, client_message, address) ? 0 : 1;
+		if (msg) {
+			g_print("%s\n", msg);
+			g_free(msg);
+		}
+
+		ret = msg ? 0 : 1;
 		g_free(address);
 		goto out;
 	}

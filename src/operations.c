@@ -85,5 +85,5 @@ void op_control_free(void* dontcare)
 char* op_pubsub_parse(const char* param, void* ctx)
 {
 	struct op_services* services = (struct op_services*)ctx;
-	return strdup(pubsub_get_address(services->pub_sub));
+	return g_strdup_printf("OK %s", pubsub_get_address(services->pub_sub));
 }

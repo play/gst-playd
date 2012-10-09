@@ -22,5 +22,6 @@
 #define _UTILITY_H
 
 gboolean util_close_socket(void* sock);
+char* util_send_reqrep_msg(void* zmq_context, const char* message, const char* address);
 
 #endif

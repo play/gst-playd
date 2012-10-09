@@ -22,6 +22,9 @@
 #ifndef _GST_UTIL_H
 #define _GST_UTIL_H
 
-GHashTable* tags_to_hash_table(const GstTagList* tags);
+#include <glib.h>
+#include <gst/gst.h>
+
+GHashTable* gsu_tags_to_hash_table(const GstTagList* tags);
 
 #endif

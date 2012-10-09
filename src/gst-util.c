@@ -36,7 +36,9 @@ static void tag_to_hash_table(const GstTagList * list, const gchar * tag, gpoint
 		if (G_VALUE_HOLDS_STRING (val)) {
 			value = strdup(g_value_get_string(val));
 		} else if (G_VALUE_HOLDS_UINT (val)) {
-			value = g_strdup_printf("%ud", g_value_get_uint(val));
+			value = g_strdup_printf("%u", g_value_get_uint(val));
+		} else if (G_VALUE_HOLDS_UINT64(val)) {
+			value = g_strdup_printf("%lu64", g_value_get_uint64(val));
 		} else if (G_VALUE_HOLDS_DOUBLE (val)) {
 			value = g_strdup_printf("%f", g_value_get_double(val));
 		} else if (G_VALUE_HOLDS_BOOLEAN (val)) { 
@@ -48,15 +50,18 @@ static void tag_to_hash_table(const GstTagList * list, const gchar * tag, gpoint
 		} else if (GST_VALUE_HOLDS_DATE (val)) { 
 			value = g_new0(char, sizeof(char) * 128);
 			g_date_strftime(value, 50, "%F", gst_value_get_date (val));
+		/*} else if (GST_VALUE_HOLDS_DATE_TIME (val)) { 
+			value = gst_date_time_to_iso8601_string((GstDateTime*)val); */
 		} else {
 			value = g_strdup_printf ("tag of type ’%s’\n", G_VALUE_TYPE_NAME (val)); 
 		}
 
+		g_warning("Found tag: %s => %s", tag, value);
 		g_hash_table_insert(ret, g_strdup_printf("%s_%d", tag, i), value);
 	}
 }
 
-GHashTable* tags_to_hash_table(const GstTagList* tags)
+GHashTable* gsu_tags_to_hash_table(const GstTagList* tags)
 {
 	GHashTable* ret = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 	gst_tag_list_foreach(tags, tag_to_hash_table, ret);

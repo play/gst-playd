@@ -25,6 +25,12 @@
 
 #include "utility.h"
 
+
+void util_zmq_glib_free(void* to_free, void* hint)
+{
+	g_free(to_free);
+}
+
 gboolean util_close_socket(void* sock)
 {
 	if (!sock) return TRUE;

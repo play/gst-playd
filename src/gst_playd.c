@@ -69,11 +69,6 @@ static char* zeromq_address_from_port(const char* address, int port)
 	return g_strdup_printf("tcp://%s:%d", address, port + 10000);
 }
 
-static void zmq_glib_free(void* to_free, void* hint)
-{
-	g_free(to_free);
-}
-
 static int handle_message(void* zmq_sock, struct parse_ctx* parser)
 {
 	int ret = 0;
@@ -102,7 +97,7 @@ static int handle_message(void* zmq_sock, struct parse_ctx* parser)
 	g_warning("About to send reply: %s", data);
 
 	zmq_msg_t rep_msg;
-	zmq_msg_init_data(&rep_msg, (void*)data, sizeof(char) * strlen(data), zmq_glib_free, NULL);
+	zmq_msg_init_data(&rep_msg, (void*)data, sizeof(char) * strlen(data), util_zmq_glib_free, NULL);
 	zmq_msg_send(&rep_msg, zmq_sock, 0);
 	zmq_msg_close(&rep_msg);
 

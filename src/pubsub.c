@@ -70,7 +70,7 @@ const char* pubsub_get_address(struct pubsub_ctx* ctx)
 gboolean pubsub_send_message(struct pubsub_ctx* ctx, const char* message)
 {
 	zmq_msg_t msg;
-	zmq_msg_init_data(&msg, (void*) message, sizeof(char) * strlen(message), NULL, NULL);
+	zmq_msg_init_data(&msg, (void*) strdup(message), sizeof(char) * strlen(message), util_zmq_glib_free, NULL);
 	zmq_msg_send(&msg, ctx->sock, 0);
 	zmq_msg_close(&msg);
 

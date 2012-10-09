@@ -25,6 +25,12 @@
 
 #include "utility.h"
 
+
+void util_zmq_glib_free(void* to_free, void* hint)
+{
+	g_free(to_free);
+}
+
 gboolean util_close_socket(void* sock)
 {
 	if (!sock) return TRUE;
@@ -35,4 +41,43 @@ gboolean util_close_socket(void* sock)
 	}
 
 	return TRUE;
+}
+
+char* util_send_reqrep_msg(void* zmq_context, const char* message, const char* address)
+{
+	char* ret = NULL;
+	int linger = 15*1000;
+	void* sock = zmq_socket(zmq_context, ZMQ_REQ);
+
+	if (!sock) {
+		g_warning("Failed to create socket: %s", zmq_strerror(zmq_errno()));
+		return ret;
+	}
+
+	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
+
+	g_print("Connecting to %s\n", address);
+	if (zmq_connect(sock, address) == -1) {
+		g_warning("Failed to connect: %s", zmq_strerror(zmq_errno()));
+		goto out;
+	}
+
+	zmq_msg_t msg;
+	zmq_msg_init_data(&msg, (void*) message, sizeof(char) * strlen(message), NULL, NULL);
+	zmq_msg_send(&msg, sock, 0);
+	zmq_msg_close(&msg);
+
+	zmq_msg_t rep_msg;
+	zmq_msg_init(&rep_msg);
+	zmq_msg_recv(&rep_msg, sock, 0);
+
+	char* rep_text = g_new0(char, zmq_msg_size(&rep_msg) + 1);
+	memcpy(rep_text, zmq_msg_data(&rep_msg), zmq_msg_size(&rep_msg));
+	zmq_msg_close(&rep_msg);
+
+	ret = rep_text;
+
+out:
+	util_close_socket(sock);
+	return ret;
 }

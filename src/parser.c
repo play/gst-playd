@@ -101,7 +101,7 @@ char* parse_message(struct parse_ctx* parser, const char* message)
 	char* ret = strdup("FAIL Message is Invalid");
 
 	GError* err = NULL;
-	GRegex* msg_regex = g_regex_new("^([A-Z]+) (.+)$", 0, 0, &err);
+	GRegex* msg_regex = g_regex_new("^([A-Z]+)[ ]?(.+)$", 0, 0, &err);
 	char* prefix = NULL;
 	char* param;
 	struct reg_entry_with_ctx* prefix_entry;

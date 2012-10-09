@@ -45,6 +45,7 @@ struct pubsub_ctx* pubsub_new(void* zmq_context, int icecast_port)
 	zmq_setsockopt(ret->sock, ZMQ_LINGER, &linger, sizeof(int));
 
 	ret->addr = pubsub_address_from_port("127.0.0.1", icecast_port);
+	g_warning("Binding %s to 0x%p", ret->addr, ret->sock);
 	if (zmq_bind(ret->sock, ret->addr) == -1) {
 		g_warning("Failed to start server on address %s: %s", ret->addr, zmq_strerror(zmq_errno()));
 
@@ -70,7 +71,8 @@ const char* pubsub_get_address(struct pubsub_ctx* ctx)
 gboolean pubsub_send_message(struct pubsub_ctx* ctx, const char* message)
 {
 	zmq_msg_t msg;
-	zmq_msg_init_data(&msg, (void*) message, sizeof(char) * strlen(message), NULL, NULL);
+	zmq_msg_init_data(&msg, (void*) strdup(message), sizeof(char) * strlen(message), util_zmq_glib_free, NULL);
+	g_warning("Sending %s to 0x%p", message, ctx->sock);
 	zmq_msg_send(&msg, ctx->sock, 0);
 	zmq_msg_close(&msg);
 

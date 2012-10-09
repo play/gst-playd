@@ -53,6 +53,7 @@ struct timer_closure {
 	struct parse_ctx* parse_ctx;
 	GMainLoop* main_loop;
 	gboolean should_quit;
+	gboolean pubsub_mode;
 };
 
 static struct parser_plugin_entry parser_operations[] = {
@@ -149,6 +150,40 @@ out:
 	return ret;
 }
 
+#if 0
+static int handle_pubsub_message(void* zmq_sock)
+{
+	int ret = 0;
+	zmq_msg_t msg;
+	char* message_text = NULL;
+
+	zmq_msg_init(&msg);
+	if (zmq_msg_recv(&msg, zmq_sock, ZMQ_DONTWAIT) == -1) {
+		switch (ret = zmq_errno()) {
+		case EAGAIN:
+			goto out;
+		case EINTR:
+			/* We'll pretend we "succeeded" so we'll look for a new message */
+			ret = 0;
+			goto out;
+		default:
+			g_warning("Failed to recieve message: 0x%x (%s)", ret, zmq_strerror(ret));
+			goto out;
+		}
+	}
+
+	message_text = g_new0(char, zmq_msg_size(&msg) + 1);
+	memcpy(message_text, zmq_msg_data(&msg), zmq_msg_size(&msg));
+
+	g_print("%s\n", message_text);
+
+out:
+	if (message_text) g_free(message_text);
+	zmq_msg_close(&msg);
+	return ret;
+}
+#endif
+
 static gboolean handle_incoming_messages(gpointer user_data)
 {
 	struct timer_closure* closure = (struct timer_closure*) user_data;
@@ -171,6 +206,34 @@ static gboolean handle_sigint(void* shouldquit)
 	*should_quit = TRUE;
 
 	return TRUE;
+}
+
+static void* create_server_socket(void* zmq_ctx, int icecast_port)
+{
+	void* sock;
+	void* ret = NULL;
+	char* address = zeromq_address_from_port("127.0.0.1", icecast_port);
+
+	int linger = 5*1000;
+	sock = zmq_socket(zmq_ctx, ZMQ_REP);
+
+	if (!sock) {
+		g_warning("Failing to create socket %s", zmq_strerror(zmq_errno()));
+		goto out;
+	}
+
+	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
+
+	if (zmq_bind(sock, address) == -1) {
+		g_warning("Failed to start server on address %s: %s", address, zmq_strerror(zmq_errno()));
+		goto out;
+	}
+
+	ret = sock;
+
+out:
+	g_free(address);
+	return ret;
 }
 
 int main (int argc, char **argv)
@@ -197,27 +260,16 @@ int main (int argc, char **argv)
 	}
 
 	zmq_ctx = zmq_ctx_new();
-	char* address = zeromq_address_from_port("127.0.0.1", icecast_port);
 
 	if (client_message) {
+		char* address = zeromq_address_from_port("127.0.0.1", icecast_port);
+
 		ret = send_client_message(zmq_ctx, client_message, address) ? 0 : 1;
+		g_free(address);
 		goto out;
 	}
 
-	int linger = 5*1000;
-	sock = zmq_socket(zmq_ctx, ZMQ_REP);
-
-	if (!sock) {
-		g_warning("Failing to create socket %s", zmq_strerror(zmq_errno()));
-		goto out;
-	}
-
-	zmq_setsockopt(sock, ZMQ_LINGER, &linger, sizeof(int));
-
-	if (zmq_bind(sock, address) == -1) {
-		g_warning("Failed to start server on address %s: %s", address, zmq_strerror(zmq_errno()));
-		goto out;
-	}
+	sock = create_server_socket(zmq_ctx, icecast_port);
 
 	struct op_services* services = g_new0(struct op_services, 1);
 	if (!(services->pub_sub = pubsub_new(zmq_ctx, icecast_port))) {
@@ -239,7 +291,7 @@ int main (int argc, char **argv)
 
 	GMainLoop* main_loop = g_main_loop_new(NULL, FALSE);
 
-	struct timer_closure closure = { sock, parser, main_loop, FALSE, };
+	struct timer_closure closure = { sock, parser, main_loop, FALSE, FALSE, };
 	g_timeout_add(250, handle_incoming_messages, &closure);
 
 #ifdef G_OS_UNIX
@@ -258,7 +310,6 @@ int main (int argc, char **argv)
 out:
 	util_close_socket(sock);
 	if (zmq_ctx) zmq_ctx_destroy(zmq_ctx);
-	if (address) g_free(address);
 
 	g_option_context_free(ctx);
 	return ret;

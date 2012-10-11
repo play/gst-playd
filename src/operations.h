@@ -31,4 +31,9 @@ char* op_pubsub_parse(const char* param, void*);
 gboolean op_control_register(void* ctx, struct message_dispatch_entry** entries);
 void op_control_free(void* ctx);
 
+void* op_playback_new(void*);
+char* op_tags_parse(const char* param, void*);
+gboolean op_playback_register(void* ctx, struct message_dispatch_entry** entries);
+void op_playback_free(void* ctx);
+
 #endif

@@ -81,3 +81,31 @@ out:
 	util_close_socket(sock);
 	return ret;
 }
+
+static void hash_foreach_calc_length(gpointer key, gpointer value, gpointer user_data)
+{
+	int* len = (int*)user_data;
+	*len = (*len) + strlen((char*)key) + strlen((char*)value) + 2; /*newlines*/
+}
+
+static void hash_foreach_create_message(gpointer key, gpointer value, gpointer user_data)
+{
+	/* XXX: I hate this code and it makes me want to die */
+	char** data = (char**)user_data;
+	*data += sprintf(*data, "%s\n%s\n", (char*)key, (char*)value);
+}
+
+char* util_hash_table_as_string(GHashTable* table)
+{
+	char* ret;
+	int bufsize = 4;
+
+	g_hash_table_foreach(table, hash_foreach_calc_length, &bufsize);
+
+	ret = g_new0(char, bufsize);
+
+	char* iter = ret;
+	g_hash_table_foreach(table, hash_foreach_create_message, &iter);
+
+	return ret;
+}

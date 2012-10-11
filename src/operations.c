@@ -23,6 +23,8 @@
 
 #include "parser.h"
 #include "operations.h"
+#include "utility.h"
+#include "gst-util.h"
 #include "op_services.h"
 
 struct message_dispatch_entry ping_messages[] = {
@@ -35,6 +37,11 @@ struct message_dispatch_entry control_messages[] = {
 	{ NULL },
 };
 
+struct message_dispatch_entry playback_messages[] = {
+	{ "TAGS", op_tags_parse },
+	{ NULL },
+};
+
 
 /*
  * Ping
@@ -42,7 +49,6 @@ struct message_dispatch_entry control_messages[] = {
 
 void* op_ping_new(void* services)
 {
-	g_warning("op_services = 0x%p", services);
 	return services;
 }
 
@@ -60,7 +66,6 @@ char* op_ping_parse(const char* param, void* ctx)
 {
 	struct op_services* services = (struct op_services*)ctx;
 
-	g_warning("op_services = 0x%p", services);
 	if (!param) param = "(none)";
 	char* ret = g_strdup_printf("OK Message was %s", param);
 
@@ -75,7 +80,6 @@ char* op_ping_parse(const char* param, void* ctx)
 
 void* op_control_new(void* op_services)
 {
-	g_warning("services: 0x%p", op_services);
 	return op_services;
 }
 
@@ -93,4 +97,91 @@ char* op_pubsub_parse(const char* param, void* ctx)
 {
 	struct op_services* services = (struct op_services*)ctx;
 	return g_strdup_printf("OK %s", pubsub_get_address(services->pub_sub));
+}
+
+
+struct playback_ctx {
+	struct op_services* services;
+};
+
+/*
+ * Playback Messages
+ */
+
+void* op_playback_new(void* op_services)
+{
+	return op_services;
+}
+
+gboolean op_playback_register(void* ctx, struct message_dispatch_entry** entries)
+{
+	*entries = playback_messages;
+	return TRUE;
+}
+
+void op_playback_free(void* dontcare)
+{
+}
+
+static void on_new_pad_tags(GstElement* dec, GstPad* pad, GstElement* fakesink) 
+{
+	  GstPad *sinkpad;
+
+	  sinkpad = gst_element_get_static_pad(fakesink, "sink"); 
+
+	  if (!gst_pad_is_linked (sinkpad)) {
+		  if (gst_pad_link(pad, sinkpad) != GST_PAD_LINK_OK)  {
+			  g_error("Failed to link pads!");
+		  }
+	  }
+	    
+	  gst_object_unref (sinkpad);
+}
+
+char* op_tags_parse(const char* param, void* ctx)
+{
+	GstElement* pipe;
+	GstElement* dec;
+	GstElement* sink;
+
+	GstMessage* msg;
+	char* ret;
+
+	pipe = gst_pipeline_new("pipeline");
+	dec = gst_element_factory_make("uridecodebin", NULL); 
+
+	g_object_set(dec, "uri", param, NULL);
+
+	gst_bin_add (GST_BIN (pipe), dec);
+	sink = gst_element_factory_make("fakesink", NULL); gst_bin_add (GST_BIN (pipe), sink);
+	g_signal_connect(dec, "pad-added", G_CALLBACK (on_new_pad_tags), sink);
+
+	gst_element_set_state(pipe, GST_STATE_PAUSED);
+
+	GHashTable* tag_table = NULL;
+
+	while (TRUE) {
+		GstTagList *tags = NULL;
+
+		msg = gst_bus_timed_pop_filtered(GST_ELEMENT_BUS (pipe), GST_CLOCK_TIME_NONE,
+			GST_MESSAGE_ASYNC_DONE | GST_MESSAGE_TAG | GST_MESSAGE_ERROR);
+
+		/* error or async_done */ 
+		if (GST_MESSAGE_TYPE (msg) != GST_MESSAGE_TAG) {
+			break;
+		}
+
+		gst_message_parse_tag(msg, &tags);
+		tag_table = gsu_tags_to_hash_table(tags);
+
+		gst_tag_list_free(tags);
+		gst_message_unref(msg);
+	}
+
+	char* table_data = util_hash_table_as_string(tag_table);
+	ret = g_strdup_printf("OK\n%s", table_data);
+	g_free(table_data);
+	
+	g_hash_table_destroy(tag_table);
+	return ret;
 }

@@ -1,5 +1,5 @@
 /*
-   utility.h - Misc helper functions
+   gst-util.h - GStreamer helper functions
 
    Copyright (C) 2012 Paul Betts
 
@@ -18,12 +18,13 @@
    Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
-#ifndef _UTILITY_H
-#define _UTILITY_H
 
-gboolean util_close_socket(void* sock);
-char* util_send_reqrep_msg(void* zmq_context, const char* message, const char* address);
-void util_zmq_glib_free(void* to_free, void* hint);
-char* util_hash_table_as_string(GHashTable* table);
+#ifndef _GST_UTIL_H
+#define _GST_UTIL_H
+
+#include <glib.h>
+#include <gst/gst.h>
+
+GHashTable* gsu_tags_to_hash_table(const GstTagList* tags);
 
 #endif

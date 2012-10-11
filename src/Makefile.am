@@ -2,6 +2,7 @@ bin_PROGRAMS=gst_playd
 
 gst_playd_SOURCES= \
 	gst_playd.c \
+	gst-util.c \
 	parser.c \
 	pubsub.c \
 	operations.c \

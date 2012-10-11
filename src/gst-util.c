@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "gst-util.h"
+#include "uuencode.h"
 
 static void tag_to_hash_table(const GstTagList * list, const gchar * tag, gpointer user_data) 
 {
@@ -45,8 +46,10 @@ static void tag_to_hash_table(const GstTagList * list, const gchar * tag, gpoint
 			value = strdup(g_value_get_boolean (val) ? "true" : "false");
 		} else if (GST_VALUE_HOLDS_BUFFER (val)) {
 			GstBuffer* buf = gst_value_get_buffer(val);
-			value = g_new0 (char, GST_BUFFER_SIZE(buf) + 1);
-			memcpy(value, GST_BUFFER_DATA(buf), sizeof(char) * GST_BUFFER_SIZE(buf));
+
+			int size = uuencode_get_length(GST_BUFFER_SIZE(buf));
+			value = g_new0 (char, size + 1);
+			uuencode(value, GST_BUFFER_DATA(buf), GST_BUFFER_SIZE(buf), uuenc_tbl_base64);
 		} else if (GST_VALUE_HOLDS_DATE (val)) { 
 			value = g_new0(char, sizeof(char) * 128);
 			g_date_strftime(value, 50, "%F", gst_value_get_date (val));

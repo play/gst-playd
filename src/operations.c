@@ -113,7 +113,10 @@ struct source_item {
 
 struct playback_ctx {
 	struct op_services* services;
-	GstPipeline* pipeline;
+	GstElement* pipeline;
+
+	GstElement* mux;
+	GstElement* audio_sink;
 
 	GSList* sources;
 };
@@ -169,16 +172,37 @@ static void source_free_and_unlink(struct source_item* item, GstElement* mux)
 
 void* op_playback_new(void* op_services)
 {
+	GError* error = NULL;
+	struct playback_ctx* ret = g_new0(struct playback_ctx, 1);
+
+	ret->services = op_services;
+	if (!(ret->audio_sink = gst_parse_launch("audioconvert ! osxaudiosink", &error))) {
+		g_error("Couldn't create audio sink: %s", error->message);
+		return NULL;
+	}
+
+	if (!(ret->mux = gst_element_factory_make("adder", NULL))) {
+		g_error("Couldn't create mixer");
+		return NULL;
+	}
+
+	ret->pipeline = gst_pipeline_new("pipeline");
+
+	gst_bin_add_many(GST_BIN_CAST(ret->pipeline), ret->mux, ret->audio_sink, NULL);
 	return op_services;
 }
 
 gboolean op_playback_register(void* ctx, struct message_dispatch_entry** entries)
 {
+	if (!ctx) {
+		return FALSE;
+	}
+
 	*entries = playback_messages;
 	return TRUE;
 }
 
-void op_playback_free(void* dontcare)
+void op_playback_free(void* ctx)
 {
 }
 

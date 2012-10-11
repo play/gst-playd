@@ -59,15 +59,12 @@ static void tag_to_hash_table(const GstTagList * list, const gchar * tag, gpoint
 			value = g_strdup_printf ("tag of type ’%s’", G_VALUE_TYPE_NAME (val)); 
 		}
 
-		g_warning("Found tag: %s => %s", tag, value);
+		g_warning("Found tag: %s", tag);
 		g_hash_table_insert(ret, g_strdup_printf("%s_%d", tag, i), value);
 	}
 }
 
-GHashTable* gsu_tags_to_hash_table(const GstTagList* tags)
+void gsu_tags_to_hash_table(const GstTagList* tags, GHashTable* table)
 {
-	GHashTable* ret = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-	gst_tag_list_foreach(tags, tag_to_hash_table, ret);
-
-	return ret;
+	gst_tag_list_foreach(tags, tag_to_hash_table, table);
 }

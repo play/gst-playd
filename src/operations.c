@@ -158,7 +158,7 @@ char* op_tags_parse(const char* param, void* ctx)
 
 	gst_element_set_state(pipe, GST_STATE_PAUSED);
 
-	GHashTable* tag_table = NULL;
+	GHashTable* tag_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
 	while (TRUE) {
 		GstTagList *tags = NULL;
@@ -172,7 +172,7 @@ char* op_tags_parse(const char* param, void* ctx)
 		}
 
 		gst_message_parse_tag(msg, &tags);
-		tag_table = gsu_tags_to_hash_table(tags);
+		gsu_tags_to_hash_table(tags, tag_table);
 
 		gst_tag_list_free(tags);
 		gst_message_unref(msg);

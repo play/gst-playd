@@ -25,6 +25,6 @@
 #include <glib.h>
 #include <gst/gst.h>
 
-GHashTable* gsu_tags_to_hash_table(const GstTagList* tags);
+void gsu_tags_to_hash_table(const GstTagList* tags, GHashTable* table);
 
 #endif

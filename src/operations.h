@@ -28,6 +28,7 @@ void op_ping_free(void* ctx);
 
 void* op_control_new(void*);
 char* op_pubsub_parse(const char* param, void*);
+char* op_quit_parse(const char* param, void* ctx);
 gboolean op_control_register(void* ctx, struct message_dispatch_entry** entries);
 void op_control_free(void* ctx);
 

@@ -25,6 +25,7 @@
 
 struct op_services {
 	struct pubsub_ctx* pub_sub;
+	gboolean* should_quit;
 };
 
 #endif

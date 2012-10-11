@@ -34,6 +34,7 @@ struct message_dispatch_entry ping_messages[] = {
 
 struct message_dispatch_entry control_messages[] = {
 	{ "PUBSUB", op_pubsub_parse },
+	{ "QUIT", op_quit_parse },
 	{ NULL },
 };
 
@@ -99,6 +100,14 @@ char* op_pubsub_parse(const char* param, void* ctx)
 {
 	struct op_services* services = (struct op_services*)ctx;
 	return g_strdup_printf("OK %s", pubsub_get_address(services->pub_sub));
+}
+
+char* op_quit_parse(const char* param, void* ctx)
+{
+	struct op_services* services = (struct op_services*)ctx;
+	*services->should_quit = TRUE;
+
+	return strdup("OK");
 }
 
 

@@ -265,6 +265,7 @@ int main (int argc, char **argv)
 	zmq_ctx = zmq_ctx_new();
 
 	struct timer_closure closure = { NULL, NULL, NULL, FALSE, FALSE, };
+	services.should_quit = &closure.should_quit;
 
 	if (client_message) {
 		char* address = zeromq_address_from_port("127.0.0.1", icecast_port);

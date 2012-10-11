@@ -53,7 +53,7 @@ static void tag_to_hash_table(const GstTagList * list, const gchar * tag, gpoint
 		/*} else if (GST_VALUE_HOLDS_DATE_TIME (val)) { 
 			value = gst_date_time_to_iso8601_string((GstDateTime*)val); */
 		} else {
-			value = g_strdup_printf ("tag of type ’%s’\n", G_VALUE_TYPE_NAME (val)); 
+			value = g_strdup_printf ("tag of type ’%s’", G_VALUE_TYPE_NAME (val)); 
 		}
 
 		g_warning("Found tag: %s => %s", tag, value);

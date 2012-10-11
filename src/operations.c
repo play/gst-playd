@@ -137,6 +137,19 @@ static void on_new_pad_tags(GstElement* dec, GstPad* pad, GstElement* fakesink)
 	  gst_object_unref (sinkpad);
 }
 
+static void hash_foreach_calc_length(gpointer key, gpointer value, gpointer user_data)
+{
+	int* len = (int*)user_data;
+	*len = (*len) + strlen((char*)key) + strlen((char*)value) + 2; /*newlines*/
+}
+
+static void hash_foreach_create_message(gpointer key, gpointer value, gpointer user_data)
+{
+	/* XXX: I hate this code and it makes me want to die */
+	char** data = (char**)user_data;
+	*data += sprintf(*data, "%s\n%s\n", (char*)key, (char*)value);
+}
+
 char* op_tags_parse(const char* param, void* ctx)
 {
 	GstElement* pipe;
@@ -144,6 +157,7 @@ char* op_tags_parse(const char* param, void* ctx)
 	GstElement* sink;
 
 	GstMessage* msg;
+	char* ret;
 
 	pipe = gst_pipeline_new("pipeline");
 	dec = gst_element_factory_make("uridecodebin", NULL); 
@@ -174,9 +188,17 @@ char* op_tags_parse(const char* param, void* ctx)
 
 		gst_tag_list_free(tags);
 		gst_message_unref(msg);
-					
 	}
 
+	int bufsize = 10;
+	g_hash_table_foreach(tag_table, hash_foreach_calc_length, &bufsize);
+
+	ret = g_new0(char, bufsize);
+	strcpy(ret, "OK\n");
+
+	char* start_buf = ret + 3;
+	g_hash_table_foreach(tag_table, hash_foreach_create_message, &start_buf);
+
 	g_hash_table_destroy(tag_table);
-	return g_strdup_printf("OK");
+	return ret;
 }

@@ -156,7 +156,7 @@ static void source_pad_remove_foreach(gpointer item, gpointer user_data)
 
 	gst_pad_unlink(source_pad, mux_pad);
 	gst_element_release_request_pad(mux, mux_pad);
-	g_object_unref(mux_pad);
+	g_object_unref(GST_OBJECT(mux_pad));
 }
 
 static void source_free_and_unlink(struct source_item* item, GstElement* mux)
@@ -189,7 +189,7 @@ void* op_playback_new(void* op_services)
 	ret->pipeline = gst_pipeline_new("pipeline");
 
 	gst_bin_add_many(GST_BIN_CAST(ret->pipeline), ret->mux, ret->audio_sink, NULL);
-	return op_services;
+	return ret;
 }
 
 gboolean op_playback_register(void* ctx, struct message_dispatch_entry** entries)
@@ -204,6 +204,15 @@ gboolean op_playback_register(void* ctx, struct message_dispatch_entry** entries
 
 void op_playback_free(void* ctx)
 {
+	struct playback_ctx* context = (struct playback_ctx*)ctx;
+	GSList* iter = context->sources;
+
+	while (iter) {
+		source_free_and_unlink((struct source_item*)iter->data, context->mux);
+		iter = g_slist_next(iter);
+	}
+
+	g_object_unref(GST_OBJECT(context->pipeline));
 }
 
 static void on_new_pad_tags(GstElement* dec, GstPad* pad, GstElement* fakesink) 

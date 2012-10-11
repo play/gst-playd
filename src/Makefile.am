@@ -7,6 +7,7 @@ gst_playd_SOURCES= \
 	pubsub.c \
 	operations.c \
 	utility.c \
+	uuencode.c \
 	gst_playd.1 \
 	aclocal.m4
 

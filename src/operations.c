@@ -145,7 +145,7 @@ char* op_tags_parse(const char* param, void* ctx)
 	GstElement* sink;
 
 	GstMessage* msg;
-	char* ret;
+	char* ret = NULL;
 
 	pipe = gst_pipeline_new("pipeline");
 	dec = gst_element_factory_make("uridecodebin", NULL); 
@@ -166,6 +166,13 @@ char* op_tags_parse(const char* param, void* ctx)
 		msg = gst_bus_timed_pop_filtered(GST_ELEMENT_BUS (pipe), GST_CLOCK_TIME_NONE,
 			GST_MESSAGE_ASYNC_DONE | GST_MESSAGE_TAG | GST_MESSAGE_ERROR);
 
+		if (GST_MESSAGE_TYPE (msg) == GST_MESSAGE_ERROR) {
+			GError* error = NULL;
+			gst_message_parse_error(msg, &error, NULL);
+			ret = g_strdup_printf("FAIL %s", error->message);
+			break;
+		}
+
 		/* error or async_done */ 
 		if (GST_MESSAGE_TYPE (msg) != GST_MESSAGE_TAG) {
 			break;
@@ -178,10 +185,14 @@ char* op_tags_parse(const char* param, void* ctx)
 		gst_message_unref(msg);
 	}
 
-	char* table_data = util_hash_table_as_string(tag_table);
-	ret = g_strdup_printf("OK\n%s", table_data);
-	g_free(table_data);
-	
+	if (!ret || g_hash_table_size(tag_table) > 0) {
+		if (ret) g_free(ret);
+
+		char* table_data = util_hash_table_as_string(tag_table);
+		ret = g_strdup_printf("OK\n%s", table_data);
+		g_free(table_data);
+	}
+
 	g_hash_table_destroy(tag_table);
 	return ret;
 }

@@ -39,6 +39,8 @@ struct message_dispatch_entry control_messages[] = {
 
 struct message_dispatch_entry playback_messages[] = {
 	{ "TAGS", op_tags_parse },
+	{ "PLAY", op_play_parse },
+	{ "STOP", op_stop_parse },
 	{ NULL },
 };
 
@@ -100,13 +102,70 @@ char* op_pubsub_parse(const char* param, void* ctx)
 }
 
 
-struct playback_ctx {
-	struct op_services* services;
-};
-
 /*
  * Playback Messages
  */
+
+struct source_item {
+	char* uri;
+	GstElement* element;
+};
+
+struct playback_ctx {
+	struct op_services* services;
+	GstPipeline* pipeline;
+
+	GSList* sources;
+};
+
+static void on_new_pad_link(GstElement* src, GstPad* pad, GstElement* mux) 
+{
+	GstPad* mux_pad = gst_element_get_request_pad(mux, "src%d");
+	if (!mux_pad) {
+		g_error("Couldn't get request pad from mux!");
+		return;
+	}
+
+	if (!gst_pad_link(pad, mux_pad)) {
+		g_error("Couldn't link source to mux!");
+		return;
+	}
+}
+
+static struct source_item* source_new_and_link(const char* uri, GstElement* mux)
+{
+	struct source_item* ret = g_new0(struct source_item, 1);
+
+	ret->uri = strdup(uri);
+	ret->element = gst_element_factory_make("uridecodebin", NULL);
+
+	g_object_set(ret->element, "uri", uri, NULL);
+	g_signal_connect(ret, "pad-added", G_CALLBACK(on_new_pad_link), mux);
+
+	return ret;
+}
+
+static void source_pad_remove_foreach(gpointer item, gpointer user_data)
+{
+	GstPad* source_pad = GST_PAD_CAST(item);
+	GstElement* mux = GST_ELEMENT_CAST(user_data);
+	GstPad* mux_pad = gst_pad_get_peer(source_pad);
+
+	gst_pad_unlink(source_pad, mux_pad);
+	gst_element_release_request_pad(mux, mux_pad);
+	g_object_unref(mux_pad);
+}
+
+static void source_free_and_unlink(struct source_item* item, GstElement* mux)
+{
+	GstIterator* pad_iterator;
+
+	pad_iterator = gst_element_iterate_sink_pads(item->element);
+	gst_iterator_foreach(pad_iterator, source_pad_remove_foreach, mux);
+
+	g_free(item->uri);
+	g_free(item);
+}
 
 void* op_playback_new(void* op_services)
 {
@@ -195,4 +254,14 @@ char* op_tags_parse(const char* param, void* ctx)
 
 	g_hash_table_destroy(tag_table);
 	return ret;
+}
+
+char* op_play_parse(const char* param, void* ctx)
+{
+	return NULL;
+}
+
+char* op_stop_parse(const char* param, void* ctx)
+{
+	return NULL;
 }

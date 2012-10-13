@@ -152,7 +152,7 @@ static struct source_item* source_new_and_link(const char* uri, GstElement* mux)
 	ret->element = gst_element_factory_make("uridecodebin", NULL);
 
 	g_object_set(ret->element, "uri", uri, NULL);
-	g_signal_connect(ret, "pad-added", G_CALLBACK(on_new_pad_link), mux);
+	g_signal_connect(ret->element, "pad-added", G_CALLBACK(on_new_pad_link), mux);
 
 	return ret;
 }

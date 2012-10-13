@@ -300,10 +300,34 @@ char* op_tags_parse(const char* param, void* ctx)
 
 char* op_play_parse(const char* param, void* ctx)
 {
-	return NULL;
+	struct playback_ctx* context = (struct playback_ctx*)ctx;
+
+	struct source_item* to_add;
+	if (!(to_add = source_new_and_link(param, context->mux))) {
+		return g_strdup_printf("FAIL Can't load source: %s", param);
+	}
+
+	context->sources = g_slist_prepend(context->sources, to_add);
+
+	int source_len = g_slist_length(context->sources);
+
+	/* NB: We can't connect the mux to the sink until after we have an 
+	 * audio format, which is only after we have at least one source */
+	if (source_len == 1) goto out;
+	if (!(gst_element_link(context->mux, context->audio_sink))) {
+		return strdup("FAIL couldn't configure mux");
+	}
+
+out:
+	return g_strdup_printf("OK player id: %d", source_len + 1);
 }
 
 char* op_stop_parse(const char* param, void* ctx)
 {
+	struct playback_ctx* context = (struct playback_ctx*)ctx;
+
+	int source_index = atoi(param) - 1;
+	int source_len = g_slist_length(context->sources);
+
 	return NULL;
 }

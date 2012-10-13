@@ -130,29 +130,24 @@ struct playback_ctx {
 	GSList* sources;
 };
 
-static void on_new_pad_link(GstElement* src, GstPad* pad, GstElement* mux) 
-{
-	GstPad* mux_pad = gst_element_get_request_pad(mux, "src%d");
-	if (!mux_pad) {
-		g_error("Couldn't get request pad from mux!");
-		return;
-	}
 
-	if (!gst_pad_link(pad, mux_pad)) {
-		g_error("Couldn't link source to mux!");
-		return;
+static void on_new_source_pad_link(GstElement* src, GstPad* pad, GstElement* mux)
+{
+	if (!gst_element_link(src, mux)) {
+		g_error("Couldn't link source to mux");
 	}
 }
 
-static struct source_item* source_new_and_link(const char* uri, GstElement* mux)
+static struct source_item* source_new_and_link(const char* uri, GstElement* pipeline, GstElement* mux)
 {
 	struct source_item* ret = g_new0(struct source_item, 1);
 
 	ret->uri = strdup(uri);
 	ret->element = gst_element_factory_make("uridecodebin", NULL);
 
+	gst_bin_add(GST_BIN(pipeline), ret->element);
 	g_object_set(ret->element, "uri", uri, NULL);
-	g_signal_connect(ret->element, "pad-added", G_CALLBACK(on_new_pad_link), mux);
+	g_signal_connect(ret->element, "pad-added", G_CALLBACK(on_new_source_pad_link), mux);
 
 	return ret;
 }
@@ -165,6 +160,7 @@ static void source_pad_remove_foreach(gpointer item, gpointer user_data)
 
 	gst_pad_unlink(source_pad, mux_pad);
 	gst_element_release_request_pad(mux, mux_pad);
+	// XXX: THIS IS WRONG
 	g_object_unref(GST_OBJECT(mux_pad));
 }
 
@@ -185,7 +181,7 @@ void* op_playback_new(void* op_services)
 	struct playback_ctx* ret = g_new0(struct playback_ctx, 1);
 
 	ret->services = op_services;
-	if (!(ret->audio_sink = gst_parse_launch("audioconvert ! osxaudiosink", &error))) {
+	if (!(ret->audio_sink = gst_element_factory_make("osxaudiosink", NULL))) {
 		g_error("Couldn't create audio sink: %s", error->message);
 		return NULL;
 	}
@@ -303,7 +299,7 @@ char* op_play_parse(const char* param, void* ctx)
 	struct playback_ctx* context = (struct playback_ctx*)ctx;
 
 	struct source_item* to_add;
-	if (!(to_add = source_new_and_link(param, context->mux))) {
+	if (!(to_add = source_new_and_link(param, context->pipeline, context->mux))) {
 		return g_strdup_printf("FAIL Can't load source: %s", param);
 	}
 
@@ -313,9 +309,21 @@ char* op_play_parse(const char* param, void* ctx)
 
 	/* NB: We can't connect the mux to the sink until after we have an 
 	 * audio format, which is only after we have at least one source */
-	if (source_len == 1) goto out;
-	if (!(gst_element_link(context->mux, context->audio_sink))) {
+	if (source_len != 1) goto out;
+
+	GstElement* ac = gst_element_factory_make("audioconvert", NULL);
+	gst_bin_add(GST_BIN(context->pipeline), ac);
+
+	if (!(gst_element_link_many(context->mux, ac, context->audio_sink, NULL))) {
 		return strdup("FAIL couldn't configure mux");
+	}
+
+	GstState current, pending;
+	gst_element_get_state(context->pipeline, &current, &pending, 0);
+	if (pending == GST_STATE_PLAYING || current == GST_STATE_PLAYING) goto out;
+
+	if (!gst_element_set_state(context->pipeline, GST_STATE_PLAYING)) {
+		g_error("Couldn't move to PLAYING");
 	}
 
 out:

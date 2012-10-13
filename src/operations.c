@@ -118,6 +118,7 @@ char* op_quit_parse(const char* param, void* ctx)
 struct source_item {
 	char* uri;
 	GstElement* element;
+	GstElement* ac;
 };
 
 struct playback_ctx {
@@ -145,32 +146,51 @@ static struct source_item* source_new_and_link(const char* uri, GstElement* pipe
 	ret->uri = strdup(uri);
 	ret->element = gst_element_factory_make("uridecodebin", NULL);
 
+	ret->ac = gst_element_factory_make("audioconvert", NULL);
+	gst_bin_add(GST_BIN(pipeline), ret->ac);
+	gst_element_link(ret->ac, mux);
+
 	gst_bin_add(GST_BIN(pipeline), ret->element);
 	g_object_set(ret->element, "uri", uri, NULL);
-	g_signal_connect(ret->element, "pad-added", G_CALLBACK(on_new_source_pad_link), mux);
+	g_signal_connect(ret->element, "pad-added", G_CALLBACK(on_new_source_pad_link), ret->ac);
+
+	GstState current, pending;
+	gst_element_get_state(pipeline, &current, &pending, 0);
+
+	GstElement* target = ret->element;
+	if (pending != GST_STATE_PLAYING && current != GST_STATE_PLAYING) {
+		target = pipeline;
+	} 
+
+	if (gst_element_set_state(target, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
+		g_error("Couldn't move element state to PLAYING");
+	}
 
 	return ret;
 }
 
-static void source_pad_remove_foreach(gpointer item, gpointer user_data)
+static void source_free_and_unlink(struct source_item* item, GstElement* pipeline, GstElement* mux)
 {
-	GstPad* source_pad = GST_PAD_CAST(item);
-	GstElement* mux = GST_ELEMENT_CAST(user_data);
-	GstPad* mux_pad = gst_pad_get_peer(source_pad);
+	if (gst_element_set_state(item->element, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
+		g_error("Couldn't move element state to READY");
+	}
 
-	gst_pad_unlink(source_pad, mux_pad);
-	gst_element_release_request_pad(mux, mux_pad);
-	// XXX: THIS IS WRONG
-	g_object_unref(GST_OBJECT(mux_pad));
-}
+	/* NB: If we simply unlink element, ac, and mux, we'll leave behind a
+	 * request sink on the mux where the source used to be. Since we're 
+	 * playing, this will cause us to fault out and playback to stop.
+	 *
+	 * So here, we grab the mux's request pad via the audioconvert source, 
+	 * then remove it after we do the unlink. */
+	GstPad* ac_src = gst_element_get_static_pad(item->ac, "src");
+	GstPad* mux_sink = gst_pad_get_peer(ac_src);
 
-static void source_free_and_unlink(struct source_item* item, GstElement* mux)
-{
-	GstIterator* pad_iterator;
+	gst_element_unlink_many(item->element, item->ac, mux, NULL);
 
-	pad_iterator = gst_element_iterate_sink_pads(item->element);
-	gst_iterator_foreach(pad_iterator, source_pad_remove_foreach, mux);
+	gst_element_release_request_pad(mux, mux_sink);
 
+	gst_bin_remove(GST_BIN(pipeline), item->element);
+	gst_bin_remove(GST_BIN(pipeline), item->ac);
+		
 	g_free(item->uri);
 	g_free(item);
 }
@@ -193,7 +213,13 @@ void* op_playback_new(void* op_services)
 
 	ret->pipeline = gst_pipeline_new("pipeline");
 
-	gst_bin_add_many(GST_BIN_CAST(ret->pipeline), ret->mux, ret->audio_sink, NULL);
+	GstElement* ac = gst_element_factory_make("audioconvert", NULL);
+	gst_bin_add_many(GST_BIN_CAST(ret->pipeline), ret->mux, ac, ret->audio_sink, NULL);
+
+	if (!(gst_element_link_many(ret->mux, ac, ret->audio_sink, NULL))) {
+		g_error("Couldn't link mux");
+	}
+
 	return ret;
 }
 
@@ -213,11 +239,15 @@ void op_playback_free(void* ctx)
 	GSList* iter = context->sources;
 
 	while (iter) {
-		source_free_and_unlink((struct source_item*)iter->data, context->mux);
+		source_free_and_unlink((struct source_item*)iter->data, context->pipeline, context->mux);
 		iter = g_slist_next(iter);
 	}
 
+	gst_element_set_state(context->pipeline, GST_STATE_READY);
 	g_object_unref(GST_OBJECT(context->pipeline));
+
+	g_slist_free(context->sources);
+	g_free(context);
 }
 
 static void on_new_pad_tags(GstElement* dec, GstPad* pad, GstElement* fakesink) 
@@ -307,27 +337,7 @@ char* op_play_parse(const char* param, void* ctx)
 
 	int source_len = g_slist_length(context->sources);
 
-	/* NB: We can't connect the mux to the sink until after we have an 
-	 * audio format, which is only after we have at least one source */
-	if (source_len != 1) goto out;
-
-	GstElement* ac = gst_element_factory_make("audioconvert", NULL);
-	gst_bin_add(GST_BIN(context->pipeline), ac);
-
-	if (!(gst_element_link_many(context->mux, ac, context->audio_sink, NULL))) {
-		return strdup("FAIL couldn't configure mux");
-	}
-
-	GstState current, pending;
-	gst_element_get_state(context->pipeline, &current, &pending, 0);
-	if (pending == GST_STATE_PLAYING || current == GST_STATE_PLAYING) goto out;
-
-	if (!gst_element_set_state(context->pipeline, GST_STATE_PLAYING)) {
-		g_error("Couldn't move to PLAYING");
-	}
-
-out:
-	return g_strdup_printf("OK player id: %d", source_len + 1);
+	return g_strdup_printf("OK player id: %d", source_len);
 }
 
 char* op_stop_parse(const char* param, void* ctx)
@@ -337,5 +347,19 @@ char* op_stop_parse(const char* param, void* ctx)
 	int source_index = atoi(param) - 1;
 	int source_len = g_slist_length(context->sources);
 
-	return NULL;
+	if (source_index < 0 || source_index >= source_len) {
+		return strdup("FAIL id is invalid");
+	}
+
+	if (source_len == 1) {
+		if (!gst_element_set_state(context->pipeline, GST_STATE_READY)) {
+			g_warning("Couldn't move to READY");
+		}
+	}
+
+	struct source_item* item = g_slist_nth(context->sources, source_index)->data;
+	context->sources = g_slist_remove(context->sources, item);
+
+	source_free_and_unlink(item, context->pipeline, context->mux);
+	return g_strdup_printf("OK player id: %d", source_index);
 }

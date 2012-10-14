@@ -12,6 +12,32 @@ many as you want in parallel for multiple audio streams.
 gst-playd knows nothing about library management. Its goal is to replace
 Airfoil and Nicecast in the current Play implementation (Play v2)
 
+## But can you explain it in ASCII art?
+
+Sure.
+
+```
+ +------------+
+ |            |
+ |  source1   |+                                                         +----------------+
+ |            ||                                                         |                |
+ +------------+|         +------------------+                         +-+|    icecast     |
+               +---------+                  |    +---------------+    |  |                |
+ +------------+          |                  |    |               +----+  +----------------+
+ |            |          |                  |    |               |
+ | source2    +----------+     mixer        +---->    splitter   |       +----------------+
+ |            |          |                  |    |               |+      |                |
+ +------------+     +----+                  |    |               |+------+    airport1    |
+                    |    +------------------+    +-------------+-+       |                |
+     ...            |                                          |         +----------------+
+                    |                                          |
+ +------------+-----+                                          |         +----------------+
+ |            |                                                |         |                |
+ | source_n   +                                                +---------+    airport2    |
+ |            |                                                          |                |
+ +------------+                                                          +----------------+
+```
+
 ## How does it work?
 
 gst-playd will start up a REQ/REP ZeroMQ socket on a specified port - meaning,

@@ -249,6 +249,10 @@ int main (int argc, char **argv)
 	void* zmq_ctx = NULL;
 	struct op_services services;
 
+	char cwd[4096];
+	getcwd(cwd, sizeof(char) * 4096);
+	setenv("GST_DEBUG_DUMP_DOT_DIR", cwd, 0);
+
 	g_thread_init(NULL);
 
 	ctx = g_option_context_new(" - A GStreamer backend daemon for Play");

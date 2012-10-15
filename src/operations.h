@@ -35,6 +35,7 @@ void op_control_free(void* ctx);
 void* op_playback_new(void*);
 char* op_tags_parse(const char* param, void*);
 char* op_play_parse(const char* param, void* ctx);
+char* op_dumpgraph_parse(const char* param, void* ctx);
 char* op_stop_parse(const char* param, void* ctx);
 gboolean op_playback_register(void* ctx, struct message_dispatch_entry** entries);
 void op_playback_free(void* ctx);

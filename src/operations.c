@@ -42,6 +42,7 @@ struct message_dispatch_entry playback_messages[] = {
 	{ "TAGS", op_tags_parse },
 	{ "PLAY", op_play_parse },
 	{ "STOP", op_stop_parse },
+	{ "DUMPGRAPH", op_dumpgraph_parse },
 	{ NULL },
 };
 
@@ -351,15 +352,17 @@ char* op_stop_parse(const char* param, void* ctx)
 		return strdup("FAIL id is invalid");
 	}
 
-	if (source_len == 1) {
-		if (!gst_element_set_state(context->pipeline, GST_STATE_READY)) {
-			g_warning("Couldn't move to READY");
-		}
-	}
-
 	struct source_item* item = g_slist_nth(context->sources, source_index)->data;
 	context->sources = g_slist_remove(context->sources, item);
 
 	source_free_and_unlink(item, context->pipeline, context->mux);
 	return g_strdup_printf("OK player id: %d", source_index);
+}
+
+char* op_dumpgraph_parse(const char* param, void* ctx)
+{
+	struct playback_ctx* context = (struct playback_ctx*)ctx;
+
+	GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS(GST_BIN(context->pipeline), GST_DEBUG_GRAPH_SHOW_ALL, param);
+	return strdup("OK");
 }

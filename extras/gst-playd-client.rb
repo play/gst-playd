@@ -31,6 +31,16 @@ class GstPlayDaemon
     response_to_tag_dict(@rep.recv)
   end
 
+  def play(uri)
+    @rep.send "PLAY #{uri}"
+    return parse_response(@rep.recv).gsub(/.*: /, '')
+  end
+
+  def stop(id)
+    @rep.send "STOP #{id}"
+    parse_response(@rep.recv); nil
+  end
+
 private
 
   def parse_response(msg)

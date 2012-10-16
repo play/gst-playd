@@ -1,5 +1,5 @@
 /*
-   operations.h - Message handlers
+   play.h - Play pipeline message handlers
 
    Copyright (C) 2012 Paul Betts
 
@@ -18,19 +18,8 @@
    Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
-#ifndef _OPERATIONS_H
-#define _OPERATIONS_H
-
-void* op_ping_new(void*);
-char* op_ping_parse(const char* param, void*);
-gboolean op_ping_register(void* ctx, struct message_dispatch_entry** entries);
-void op_ping_free(void* ctx);
-
-void* op_control_new(void*);
-char* op_pubsub_parse(const char* param, void*);
-char* op_quit_parse(const char* param, void* ctx);
-gboolean op_control_register(void* ctx, struct message_dispatch_entry** entries);
-void op_control_free(void* ctx);
+#ifndef _PLAY_H
+#define _PLAY_H
 
 void* op_playback_new(void*);
 char* op_tags_parse(const char* param, void*);

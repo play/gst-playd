@@ -5,7 +5,9 @@ gst_playd_SOURCES= \
 	gst-util.c \
 	parser.c \
 	pubsub.c \
-	operations.c \
+	operations/control.c \
+	operations/ping.c \
+	operations/play.c \
 	utility.c \
 	uuencode.c \
 	gst_playd.1 \

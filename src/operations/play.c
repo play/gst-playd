@@ -1,5 +1,5 @@
 /*
-   operations.c - Message handlers
+   play.c - Play pipeline message handlers
 
    Copyright (C) 2012 Paul Betts
 
@@ -22,99 +22,19 @@
 #include <string.h>
 
 #include "parser.h"
-#include "operations.h"
 #include "utility.h"
 #include "gst-util.h"
 #include "op_services.h"
 
-struct message_dispatch_entry ping_messages[] = {
-	{ "PING", op_ping_parse },
-	{ NULL },
-};
+#include "operations/play.h"
 
-struct message_dispatch_entry control_messages[] = {
-	{ "PUBSUB", op_pubsub_parse },
-	{ "QUIT", op_quit_parse },
-	{ NULL },
-};
-
-struct message_dispatch_entry playback_messages[] = {
+static struct message_dispatch_entry playback_messages[] = {
 	{ "TAGS", op_tags_parse },
 	{ "PLAY", op_play_parse },
 	{ "STOP", op_stop_parse },
 	{ "DUMPGRAPH", op_dumpgraph_parse },
 	{ NULL },
 };
-
-
-/*
- * Ping
- */
-
-void* op_ping_new(void* services)
-{
-	return services;
-}
-
-gboolean op_ping_register(void* ctx, struct message_dispatch_entry** entries)
-{
-	*entries = ping_messages;
-	return TRUE;
-}
-
-void op_ping_free(void* dontcare)
-{
-}
-
-char* op_ping_parse(const char* param, void* ctx)
-{
-	struct op_services* services = (struct op_services*)ctx;
-
-	if (!param) param = "(none)";
-	char* ret = g_strdup_printf("OK Message was %s", param);
-
-	pubsub_send_message(services->pub_sub, ret);
-	return ret;
-}
-
-
-/*
- * Control Messages
- */
-
-void* op_control_new(void* op_services)
-{
-	return op_services;
-}
-
-gboolean op_control_register(void* ctx, struct message_dispatch_entry** entries)
-{
-	*entries = control_messages;
-	return TRUE;
-}
-
-void op_control_free(void* dontcare)
-{
-}
-
-char* op_pubsub_parse(const char* param, void* ctx)
-{
-	struct op_services* services = (struct op_services*)ctx;
-	return g_strdup_printf("OK %s", pubsub_get_address(services->pub_sub));
-}
-
-char* op_quit_parse(const char* param, void* ctx)
-{
-	struct op_services* services = (struct op_services*)ctx;
-	*services->should_quit = TRUE;
-
-	return strdup("OK");
-}
-
-
-/*
- * Playback Messages
- */
 
 struct source_item {
 	char* uri;

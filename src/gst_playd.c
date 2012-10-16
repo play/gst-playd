@@ -31,9 +31,12 @@
 #endif
 
 #include "parser.h"
-#include "operations.h"
 #include "utility.h"
 #include "op_services.h"
+
+#include "operations/ping.h"
+#include "operations/control.h"
+#include "operations/play.h"
 
 #define EXIT_FAILURE 1
 

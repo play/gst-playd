@@ -118,6 +118,8 @@ char* op_quit_parse(const char* param, void* ctx)
 
 struct source_item {
 	char* uri;
+	GDateTime* created_at;
+
 	GstElement* element;
 	GstElement* ac;
 };
@@ -145,6 +147,7 @@ static struct source_item* source_new_and_link(const char* uri, GstElement* pipe
 	struct source_item* ret = g_new0(struct source_item, 1);
 
 	ret->uri = strdup(uri);
+	ret->created_at = g_date_time_new_now_utc();
 	ret->element = gst_element_factory_make("uridecodebin", NULL);
 
 	ret->ac = gst_element_factory_make("audioconvert", NULL);
@@ -192,8 +195,33 @@ static void source_free_and_unlink(struct source_item* item, GstElement* pipelin
 	gst_bin_remove(GST_BIN(pipeline), item->element);
 	gst_bin_remove(GST_BIN(pipeline), item->ac);
 		
+	g_date_time_unref(item->created_at);
 	g_free(item->uri);
 	g_free(item);
+}
+
+static guint source_item_to_id(struct source_item* item)
+{
+	char to_hash[2048];
+	sprintf(to_hash, "%s 0x%p %lu", item->uri, item, g_date_time_to_unix(item->created_at));
+
+	return g_str_hash(to_hash);
+}
+
+static struct source_item* source_item_from_id(GSList* item_list, guint id)
+{
+	GSList* haystack = item_list;
+
+	while (haystack) {
+		struct source_item* needle = haystack->data;
+		if (source_item_to_id(needle) == id) {
+			return needle;
+		}
+
+		haystack = g_slist_next(haystack);
+	}
+
+	return NULL;
 }
 
 void* op_playback_new(void* op_services)
@@ -335,28 +363,24 @@ char* op_play_parse(const char* param, void* ctx)
 	}
 
 	context->sources = g_slist_prepend(context->sources, to_add);
-
-	int source_len = g_slist_length(context->sources);
-
-	return g_strdup_printf("OK player id: %d", source_len);
+	return g_strdup_printf("OK player id: %u", source_item_to_id(to_add));
 }
 
 char* op_stop_parse(const char* param, void* ctx)
 {
 	struct playback_ctx* context = (struct playback_ctx*)ctx;
 
-	int source_index = atoi(param) - 1;
-	int source_len = g_slist_length(context->sources);
+	guint id = (guint) atoll(param);
+	struct source_item* to_remove = source_item_from_id(context->sources, id);
 
-	if (source_index < 0 || source_index >= source_len) {
+	if (!to_remove) {
 		return strdup("FAIL id is invalid");
 	}
 
-	struct source_item* item = g_slist_nth(context->sources, source_index)->data;
-	context->sources = g_slist_remove(context->sources, item);
+	context->sources = g_slist_remove(context->sources, to_remove);
 
-	source_free_and_unlink(item, context->pipeline, context->mux);
-	return g_strdup_printf("OK player id: %d", source_index);
+	source_free_and_unlink(to_remove, context->pipeline, context->mux);
+	return g_strdup_printf("OK player id: %u", id);
 }
 
 char* op_dumpgraph_parse(const char* param, void* ctx)

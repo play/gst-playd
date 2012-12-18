@@ -144,6 +144,38 @@ static struct source_item* source_item_from_id(GSList* item_list, guint id)
 	return NULL;
 }
 
+static gboolean playback_bus_callback(GstBus* bus, GstMessage* message, gpointer userdata)
+{
+	struct playback_ctx* ctx = userdata;
+
+	GError* err = NULL;
+	char* prefix = NULL;
+
+	g_warning ("Got pipeline bus message of type %s", GST_MESSAGE_TYPE_NAME(message));
+	switch (GST_MESSAGE_TYPE(message)) {
+	case GST_MESSAGE_ERROR:
+		prefix = "ERROR";
+		gst_message_parse_error(message, &err, NULL);
+		break;
+	case GST_MESSAGE_WARNING:
+		prefix = "WARNING";
+		gst_message_parse_warning(message, &err, NULL);
+		break;
+	case GST_MESSAGE_INFO:
+		prefix = "INFO";
+		gst_message_parse_info(message, &err, NULL);
+		break;
+	default:
+		return TRUE;
+	}
+
+	char* msg = g_strdup_printf("%s: %s", prefix, err->message);
+	g_warning("Writing message to bus: %s", msg);
+	pubsub_send_message(ctx->services->pub_sub, msg);
+
+	return TRUE;
+}
+
 void* op_playback_new(void* op_services)
 {
 	GError* error = NULL;
@@ -167,7 +199,12 @@ void* op_playback_new(void* op_services)
 
 	if (!(gst_element_link_many(ret->mux, ac, ret->audio_sink, NULL))) {
 		g_error("Couldn't link mux");
+		return NULL;
 	}
+
+	GstBus* bus = gst_pipeline_get_bus(GST_PIPELINE(ret->pipeline));
+	gst_bus_add_watch(bus, playback_bus_callback, ret);
+	gst_object_unref(bus);
 
 	return ret;
 }

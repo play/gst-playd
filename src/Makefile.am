@@ -1,11 +1,11 @@
 bin_PROGRAMS=gst_playd
 
 if HAVE_APPLE_MEDIA
-APPLE_MEDIA_SOURCES = operations/audio_dev_osx.c
-APPLE_MEDIA_LDFLAGS = -framework CoreFoundation -framework CoreAudio -framework Cocoa
+APPLE_MEDIA_SOURCE = operations/audio_dev_osx.c
+APPLE_MEDIA_FXFLAGS = -framework CoreFoundation -framework CoreAudio -framework Cocoa
 else
-APPLE_MEDIA_SOURCES =
-APPLE_MEDIA_LDFLAGS =
+APPLE_MEDIA_SOURCE =
+APPLE_MEDIA_FXFLAGS =
 endif
 
 gst_playd_SOURCES= \
@@ -18,7 +18,7 @@ gst_playd_SOURCES= \
 	operations/play.c \
 	utility.c \
 	uuencode.c \
-	$(APPLE_MEDIA_SOURCES) \
+	$(APPLE_MEDIA_SOURCE) \
 	gst_playd.1 \
 	aclocal.m4
 
@@ -35,7 +35,7 @@ gst_playd_LDADD = \
 	$(GST_LIBS)
 
 gst_playd_LDFLAGS = \
-	$(APPLE_MEDIA_LDFLAGS)
+	$(APPLE_MEDIA_FXFLAGS)
 
 #  install the man pages
 man_MANS=gst_playd.1

@@ -43,6 +43,21 @@ AC_CHECK_FUNC(mknod)
 
 dnl Checks for typedefs, structures, and compiler characteristics.
 
-dnl Checks for library functions.
+HAVE_APPLE_MEDIA="no"
+dnl SystemConfiguration.h is common to OS X and iOS, so we check for that
+AC_CHECK_HEADER(SystemConfiguration/SystemConfiguration.h, HAVE_APPLE_MEDIA="yes", HAVE_APPLE_MEDIA="no")
 
+dnl in case header SystemConfiguration/SystemConfiguration.h is found on other platforms
+case "$host" in
+  *-*darwin*)
+    ;;
+  *)
+    HAVE_APPLE_MEDIA="no"
+    ;;
+esac
+
+AM_CONDITIONAL(HAVE_APPLE_MEDIA, test x$HAVE_APPLE_MEDIA = xyes)
+AC_DEFINE([HAVE_APPLE_MEDIA], [], [Check to see if we are running on an OS with CoreAudio])
+
+dnl Checks for library functions.
 AC_OUTPUT(Makefile src/Makefile)

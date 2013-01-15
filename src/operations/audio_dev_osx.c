@@ -57,7 +57,9 @@ char* op_listdevice_parse(const char* param, void* ctx)
 		goto out;
 	}
 
-	ret = util_int_hash_table_as_string(device_list);
+	char* table_data = util_int_hash_table_as_string(device_list);
+	ret = g_strdup_printf("OK\n%s", table_data);
+	g_free(table_data);
 	g_hash_table_destroy(device_list);
 
 out:

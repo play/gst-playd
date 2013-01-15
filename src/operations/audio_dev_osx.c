@@ -109,18 +109,19 @@ GHashTable* enumerate_audio_devices(gboolean only_input_devices, GError** error)
 	}
 
 	for(int i = 0; i < device_count; ++i) {
-		// Determine if the device is an input device (it is an input device if it has input channels)
+		/* Determine if the device is a matching device (it is an 
+		 * input device if it has input channels) */
 		data_size = 0;
 		property_address.mSelector = kAudioDevicePropertyStreamConfiguration;
 		status = AudioObjectGetPropertyDataSize(audio_devices[i], &property_address, 0, NULL, &data_size);
 		if(kAudioHardwareNoError != status) {
-			g_warning( "AudioObjectGetPropertyDataSize (kAudioDevicePropertyStreamConfiguration) failed: %i\n", status);
+			g_warning("AudioObjectGetPropertyDataSize (kAudioDevicePropertyStreamConfiguration) failed: %i\n", status);
 			continue;
 		}
 
 		AudioBufferList *bufferList = (AudioBufferList*) g_new0(char, data_size);
 		if(NULL == bufferList) {
-			fputs("Unable to allocate memory", stderr);
+			g_warning("Unable to allocate memory");
 			break;
 		}
 
@@ -133,7 +134,7 @@ GHashTable* enumerate_audio_devices(gboolean only_input_devices, GError** error)
 			continue;           
 		}
 
-		// Query device name
+		/* Query device name */
 		CFStringRef deviceName = NULL;
 		data_size = sizeof(deviceName);
 		property_address.mSelector = kAudioDevicePropertyDeviceNameCFString;

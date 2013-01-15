@@ -110,3 +110,23 @@ char* util_hash_table_as_string(GHashTable* table)
 
 	return ret;
 }
+
+
+static void hash_foreach_stringify_table(gpointer key, gpointer value, gpointer user_data)
+{
+	int int_key = *((int*)key);
+	GHashTable* table = (GHashTable*)user_data;
+
+	g_hash_table_insert(table, g_strdup_printf("%d", int_key), g_strdup((char*)value));
+}
+
+char* util_int_hash_table_as_string(GHashTable* table)
+{
+	GHashTable* temp_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+	g_hash_table_foreach(table, hash_foreach_stringify_table, temp_table);
+
+	char* ret = util_hash_table_as_string(temp_table);
+	g_hash_table_destroy(temp_table);
+
+	return ret;
+}

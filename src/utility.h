@@ -38,5 +38,6 @@ gboolean util_close_socket(void* sock);
 char* util_send_reqrep_msg(void* zmq_context, const char* message, const char* address);
 void util_zmq_glib_free(void* to_free, void* hint);
 char* util_hash_table_as_string(GHashTable* table);
+char* util_int_hash_table_as_string(GHashTable* table);
 
 #endif

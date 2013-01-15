@@ -36,6 +36,8 @@ static struct message_dispatch_entry audio_dev_messages[] = {
 	{ NULL },
 };
 
+GHashTable* enumerate_audio_devices(gboolean only_input_devices, GError** error);
+
 void* op_audiodev_new(void* op_services)
 {
 	return op_services;
@@ -43,6 +45,23 @@ void* op_audiodev_new(void* op_services)
 
 char* op_listdevice_parse(const char* param, void* ctx)
 {
+	gboolean only_input = (strcmp(param, "INPUT") == 0);
+	GError* err = NULL;
+	char* ret;
+
+	GHashTable* device_list = enumerate_audio_devices(only_input, &err);
+
+	if (err) {
+		ret = strdup(err->message);
+		g_error_free(err);
+		goto out;
+	}
+
+	ret = util_int_hash_table_as_string(device_list);
+	g_hash_table_destroy(device_list);
+
+out:
+	return ret;
 }
 
 gboolean op_audiodev_register(void* ctx, struct message_dispatch_entry** entries)
@@ -59,127 +78,83 @@ void op_audiodev_free(void* ctx)
 {
 }
 
+/* This code is based on
+ * http://stackoverflow.com/questions/4575408/audioobjectgetpropertydata-to-get-a-list-of-input-devices */
+
 GHashTable* enumerate_audio_devices(gboolean only_input_devices, GError** error)
 {
-	/* This code is based on
-	 * http://stackoverflow.com/questions/4575408/audioobjectgetpropertydata-to-get-a-list-of-input-devices
-	 */
+	gchar* error_message = NULL;
+	AudioDeviceID* audio_devices = NULL;
+	OSStatus status;
+	GHashTable* ret = g_hash_table_new_full(g_int_hash, g_int_equal, NULL, g_free);
 
-	AudioObjectPropertyAddress propertyAddress = { 
+	AudioObjectPropertyAddress property_address = { 
 		kAudioHardwarePropertyDevices, 
 		kAudioObjectPropertyScopeGlobal, 
-		kAudioObjectPropertyElementMaster 
+		kAudioObjectPropertyElementMaster,
 	};
 
-	UInt32 dataSize = 0;
-	OSStatus status = AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &propertyAddress, 0, NULL, &dataSize);
-	if(kAudioHardwareNoError != status) {
-		fprintf(stderr, "AudioObjectGetPropertyDataSize (kAudioHardwarePropertyDevices) failed: %i\n", status);
-		return NULL;
+	property_address.mScope = only_input_devices ? kAudioDevicePropertyScopeInput : kAudioDevicePropertyScopeOutput;
+
+	UInt32 data_size = 0;
+	status = AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &property_address, 0, NULL, &data_size);
+
+	UInt32 device_count = (UInt32)(data_size / sizeof(AudioDeviceID));
+	audio_devices = (AudioDeviceID*) g_new(AudioDeviceID, device_count);
+
+	status = AudioObjectGetPropertyData(kAudioObjectSystemObject, &property_address, 0, NULL, &data_size, audio_devices);
+	if(status != kAudioHardwareNoError) {
+		error_message = g_strdup_printf("AudioObjectGetPropertyData (kAudioHardwarePropertyDevices) failed: %i\n", status);
+		goto out;
 	}
 
-	UInt32 deviceCount = (UInt32)(dataSize / sizeof(AudioDeviceID));
-
-	AudioDeviceID *audioDevices = (AudioDeviceID *)(malloc(dataSize));
-	if(NULL == audioDevices) {
-		fputs("Unable to allocate memory", stderr);
-		return NULL;
-	}
-
-	status = AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, 0, NULL, &dataSize, audioDevices);
-	if(kAudioHardwareNoError != status) {
-		fprintf(stderr, "AudioObjectGetPropertyData (kAudioHardwarePropertyDevices) failed: %i\n", status);
-		free(audioDevices), audioDevices = NULL;
-		return NULL;
-	}
-
-	CFMutableArrayRef inputDeviceArray = CFArrayCreateMutable(kCFAllocatorDefault, deviceCount, &kCFTypeArrayCallBacks);
-	if(NULL == inputDeviceArray) {
-		fputs("CFArrayCreateMutable failed", stderr);
-		free(audioDevices), audioDevices = NULL;
-		return NULL;
-	}
-
-	// Iterate through all the devices and determine which are input-capable
-	propertyAddress.mScope = kAudioDevicePropertyScopeInput;
-	for(UInt32 i = 0; i < deviceCount; ++i) {
-		// Query device UID
-		CFStringRef deviceUID = NULL;
-		dataSize = sizeof(deviceUID);
-		propertyAddress.mSelector = kAudioDevicePropertyDeviceUID;
-		status = AudioObjectGetPropertyData(audioDevices[i], &propertyAddress, 0, NULL, &dataSize, &deviceUID);
-		if(kAudioHardwareNoError != status) {
-			fprintf(stderr, "AudioObjectGetPropertyData (kAudioDevicePropertyDeviceUID) failed: %i\n", status);
-			continue;
-		}
-
-		// Query device name
-		CFStringRef deviceName = NULL;
-		dataSize = sizeof(deviceName);
-		propertyAddress.mSelector = kAudioDevicePropertyDeviceNameCFString;
-		status = AudioObjectGetPropertyData(audioDevices[i], &propertyAddress, 0, NULL, &dataSize, &deviceName);
-		if(kAudioHardwareNoError != status) {
-			fprintf(stderr, "AudioObjectGetPropertyData (kAudioDevicePropertyDeviceNameCFString) failed: %i\n", status);
-			continue;
-		}
-
-		// Query device manufacturer
-		CFStringRef deviceManufacturer = NULL;
-		dataSize = sizeof(deviceManufacturer);
-		propertyAddress.mSelector = kAudioDevicePropertyDeviceManufacturerCFString;
-		status = AudioObjectGetPropertyData(audioDevices[i], &propertyAddress, 0, NULL, &dataSize, &deviceManufacturer);
-		if(kAudioHardwareNoError != status) {
-			fprintf(stderr, "AudioObjectGetPropertyData (kAudioDevicePropertyDeviceManufacturerCFString) failed: %i\n", status);
-			continue;
-		}
-
+	for(int i = 0; i < device_count; ++i) {
 		// Determine if the device is an input device (it is an input device if it has input channels)
-		dataSize = 0;
-		propertyAddress.mSelector = kAudioDevicePropertyStreamConfiguration;
-		status = AudioObjectGetPropertyDataSize(audioDevices[i], &propertyAddress, 0, NULL, &dataSize);
+		data_size = 0;
+		property_address.mSelector = kAudioDevicePropertyStreamConfiguration;
+		status = AudioObjectGetPropertyDataSize(audio_devices[i], &property_address, 0, NULL, &data_size);
 		if(kAudioHardwareNoError != status) {
-			fprintf(stderr, "AudioObjectGetPropertyDataSize (kAudioDevicePropertyStreamConfiguration) failed: %i\n", status);
+			g_warning( "AudioObjectGetPropertyDataSize (kAudioDevicePropertyStreamConfiguration) failed: %i\n", status);
 			continue;
 		}
 
-		AudioBufferList *bufferList = (AudioBufferList *)(malloc(dataSize));
+		AudioBufferList *bufferList = (AudioBufferList*) g_new0(char, data_size);
 		if(NULL == bufferList) {
 			fputs("Unable to allocate memory", stderr);
 			break;
 		}
 
-		status = AudioObjectGetPropertyData(audioDevices[i], &propertyAddress, 0, NULL, &dataSize, bufferList);
+		status = AudioObjectGetPropertyData(audio_devices[i], &property_address, 0, NULL, &data_size, bufferList);
 		if(kAudioHardwareNoError != status || 0 == bufferList->mNumberBuffers) {
 			if(kAudioHardwareNoError != status)
-				fprintf(stderr, "AudioObjectGetPropertyData (kAudioDevicePropertyStreamConfiguration) failed: %i\n", status);
+				g_warning("AudioObjectGetPropertyData (kAudioDevicePropertyStreamConfiguration) failed: %i\n", status);
+
 			free(bufferList), bufferList = NULL;
 			continue;           
 		}
 
-		free(bufferList), bufferList = NULL;
+		// Query device name
+		CFStringRef deviceName = NULL;
+		data_size = sizeof(deviceName);
+		property_address.mSelector = kAudioDevicePropertyDeviceNameCFString;
 
-		// Add a dictionary for this device to the array of input devices
-		CFStringRef keys    []  = { CFSTR("deviceUID"),     CFSTR("deviceName"),    CFSTR("deviceManufacturer") };
-		CFStringRef values  []  = { deviceUID,              deviceName,             deviceManufacturer };
+		status = AudioObjectGetPropertyData(audio_devices[i], &property_address, 0, NULL, &data_size, &deviceName);
+		if(kAudioHardwareNoError != status) {
+			g_warning("AudioObjectGetPropertyData (kAudioDevicePropertyDeviceNameCFString) failed: %i\n", status);
+			continue;
+		}
 
-		CFDictionaryRef deviceDictionary = CFDictionaryCreate(kCFAllocatorDefault, 
-			(const void **)(keys), 
-			(const void **)(values), 
-			3,
-			&kCFTypeDictionaryKeyCallBacks,
-			&kCFTypeDictionaryValueCallBacks);
-
-
-		CFArrayAppendValue(inputDeviceArray, deviceDictionary);
-
-		CFRelease(deviceDictionary), deviceDictionary = NULL;
+		char* val = g_new0(char, 512);
+		CFStringGetCString(deviceName, val, 512, kCFStringEncodingUTF8);
+		g_hash_table_insert(ret, &audio_devices[i], val);
 	}
 
-	free(audioDevices), audioDevices = NULL;
+	g_free(audio_devices);
 
-	// Return a non-mutable copy of the array
-	CFArrayRef copy = CFArrayCreateCopy(kCFAllocatorDefault, inputDeviceArray);
-	CFRelease(inputDeviceArray), inputDeviceArray = NULL;
+out:
+	if (error_message) {
+		g_set_error(error, AUDIODEV_DOMAIN, 1, "%s", error_message);
+	}
 
-	return copy;
+	return ret;
 }

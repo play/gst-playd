@@ -37,6 +37,7 @@
 #include "operations/ping.h"
 #include "operations/control.h"
 #include "operations/play.h"
+#include "operations/audio_dev_osx.h"
 
 #define EXIT_FAILURE 1
 
@@ -65,6 +66,7 @@ static struct parser_plugin_entry parser_operations[] = {
 	{ "Ping", NULL, op_ping_new, op_ping_register, op_ping_free },
 	{ "Control", NULL, op_control_new, op_control_register, op_control_free },
 	{ "Playback", NULL, op_playback_new, op_playback_register, op_playback_free },
+	{ "AudioDevices", NULL, op_audiodev_new, op_audiodev_register, op_audiodev_free },
 	{ NULL },
 };
 

@@ -21,6 +21,8 @@
 #ifndef _AUDIO_DEV_OSX_H
 #define _AUDIO_DEV_OSX_H
 
+#define AUDIODEV_DOMAIN g_quark_from_static_string("gst-playd-audiodev")
+
 void* op_audiodev_new(void*);
 char* op_listdevice_parse(const char* param, void*);
 gboolean op_audiodev_register(void* ctx, struct message_dispatch_entry** entries);
